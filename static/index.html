@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Data Explorer — QuantaFONS</title>
+    <meta name="description" content="Interactive satellite data explorer for Sentinel-1, 2, 3, and 5P missions. Draw an area on the map and fetch NDVI, NDWI, True Color, SAR, and atmospheric data.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
+    <!-- App styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+
+        <!-- ── Sidebar ─────────────────────────────────── -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">🛰️</span>
+                    <div>
+                        <h1>Sentinel Explorer</h1>
+                        <p class="tagline">QuantaFONS Satellite Data</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-content">
+
+                <!-- Mission & Product -->
+                <div class="form-section">
+                    <label class="form-label" for="product-select">
+                        <span class="label-icon">📡</span>
+                        Mission &amp; Product
+                    </label>
+                    <select id="product-select" class="form-select">
+                        <option value="" disabled selected>Loading products…</option>
+                    </select>
+                </div>
+
+                <!-- Date Range -->
+                <div class="form-section">
+                    <label class="form-label">
+                        <span class="label-icon">📅</span>
+                        Date Range
+                    </label>
+                    <div class="date-inputs">
+                        <div class="date-field">
+                            <span class="date-label">From</span>
+                            <input type="date" id="date-from" class="form-input">
+                        </div>
+                        <div class="date-field">
+                            <span class="date-label">To</span>
+                            <input type="date" id="date-to" class="form-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AOI Bounding Box -->
+                <div class="form-section">
+                    <label class="form-label">
+                        <span class="label-icon">📍</span>
+                        AOI Bounding Box
+                    </label>
+                    <div id="bbox-display" class="bbox-display">
+                        <p class="bbox-hint">Draw a rectangle on the map to define your Area of Interest</p>
+                    </div>
+                </div>
+
+                <!-- Fetch button -->
+                <button id="fetch-btn" class="fetch-btn" disabled>
+                    <span class="btn-icon">🚀</span>
+                    <span class="btn-text">Fetch Satellite Data</span>
+                </button>
+
+                <!-- Loading spinner -->
+                <div id="status-area" class="status-area hidden">
+                    <div class="loader">
+                        <div class="loader-ring"></div>
+                        <span class="loader-text">Contacting Sentinel Hub…</span>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div id="results-area" class="results-area hidden">
+                    <div class="results-header">
+                        <span class="label-icon">📊</span>
+                        <span>Results</span>
+                    </div>
+                    <div id="results-content" class="results-content"></div>
+                </div>
+            </div>
+
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                <span>◀</span>
+            </button>
+        </aside>
+
+        <!-- ── Map ─────────────────────────────────────── -->
+        <div id="map" class="map"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <!-- App JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

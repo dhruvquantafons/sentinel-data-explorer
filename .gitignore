@@ -1,0 +1,31 @@
+# Environment variables and secrets
+.env
+.env.local
+
+# Python cache & bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Output datasets and generated images
+output/
+outputs/
+*.tiff
+*.tif
+*.aux.xml
+*.csv
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE configuration
+.vscode/
+.idea/
