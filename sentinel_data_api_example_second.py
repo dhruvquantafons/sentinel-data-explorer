@@ -65,7 +65,10 @@ PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 
 # Save each run's files in its own subfolder in "output" inside this project.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+if os.environ.get("VERCEL") or os.environ.get("AWS_EXECUTION_ENV"):
+    OUTPUT_DIR = "/tmp/output"
+else:
+    OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
