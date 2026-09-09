@@ -97,6 +97,12 @@
                     </div>
                     <div id="results-content" class="results-content"></div>
                 </div>
+
+                <!-- Compare button -->
+                <button id="compare-btn" class="compare-btn">
+                    <span class="btn-icon">⚖️</span>
+                    <span class="btn-text">Compare Datasets</span>
+                </button>
             </div>
 
             <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
@@ -106,6 +112,38 @@
 
         <!-- ── Map ─────────────────────────────────────── -->
         <div id="map" class="map"></div>
+    </div>
+
+    <!-- Comparison Modal -->
+    <div id="compare-modal" class="compare-modal-overlay hidden">
+        <div class="compare-modal">
+            <div class="compare-modal-header">
+                <div class="csv-modal-title">
+                    <span>⚖️</span>
+                    <span>Temporal Data Comparison</span>
+                </div>
+                <button id="compare-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
+            </div>
+            <div class="compare-modal-content">
+                <!-- Left: Run selector -->
+                <div class="compare-selector">
+                    <div class="compare-selector-header">
+                        <span class="form-label" style="margin-bottom:0">📂 Select Runs</span>
+                    </div>
+                    <div id="compare-run-list" class="compare-run-list">
+                        <div class="csv-empty">Loading runs…</div>
+                    </div>
+                    <button id="compare-execute-btn" class="fetch-btn compare-execute-btn" disabled>
+                        <span class="btn-icon">📊</span>
+                        <span class="btn-text">Compare Selected</span>
+                    </button>
+                </div>
+                <!-- Right: Comparison table -->
+                <div id="compare-table-area" class="compare-table-area">
+                    <div class="csv-empty">Select 2 or more runs to compare their scene metadata side by side.</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- CSV Preview Modal -->
@@ -120,6 +158,97 @@
             </div>
             <div id="csv-modal-body" class="csv-modal-body">
                 <!-- Table injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Fetched Scenes Visual & Data Comparison Modal -->
+    <div id="fetched-compare-modal" class="fetched-compare-modal-overlay hidden">
+        <div class="fetched-compare-modal">
+            <div class="fetched-compare-modal-header">
+                <div class="fetched-compare-title">
+                    <span>⚖️</span>
+                    <div>
+                        <div class="modal-heading">Raster &amp; Temporal Dataset Comparison</div>
+                        <div id="fetched-compare-subtitle" class="modal-subheading">Comparing selected scenes</div>
+                    </div>
+                </div>
+                
+                <div class="fetched-compare-tabs">
+                    <button id="tab-side-by-side" class="tab-btn active">
+                        <span>🗺️</span> Side-by-Side
+                    </button>
+                    <button id="tab-split-slider" class="tab-btn">
+                        <span>🪟</span> Split Slider
+                    </button>
+                    <button id="tab-multi-grid" class="tab-btn">
+                        <span>🔲</span> Multi-Grid
+                    </button>
+                    <button id="tab-data-table" class="tab-btn">
+                        <span>📊</span> Data Matrix
+                    </button>
+                </div>
+
+                <button id="fetched-compare-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
+            </div>
+
+            <div class="fetched-compare-modal-body">
+                <!-- View 1: Side-by-Side Synced Maps -->
+                <div id="view-side-by-side" class="compare-view active">
+                    <div class="dual-map-container">
+                        <div class="map-panel">
+                            <div class="map-panel-header" id="compare-panel-header-left">
+                                <span class="badge badge-left">Left Map</span>
+                                <select id="compare-select-left" class="compare-scene-select" aria-label="Select left scene"></select>
+                            </div>
+                            <div id="map-compare-left" class="compare-map"></div>
+                        </div>
+                        <div class="map-panel">
+                            <div class="map-panel-header" id="compare-panel-header-right">
+                                <span class="badge badge-right">Right Map</span>
+                                <select id="compare-select-right" class="compare-scene-select" aria-label="Select right scene"></select>
+                            </div>
+                            <div id="map-compare-right" class="compare-map"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View 2: Split / Swipe Slider -->
+                <div id="view-split-slider" class="compare-view hidden">
+                    <div class="split-map-container">
+                        <div class="map-panel-header split-header">
+                            <div class="split-badge-item">
+                                <span class="badge badge-left">◀ Left</span>
+                                <select id="split-select-left" class="compare-scene-select" aria-label="Select left split scene"></select>
+                            </div>
+                            <div class="split-hint">Drag slider horizontally to compare</div>
+                            <div class="split-badge-item">
+                                <span class="badge badge-right">Right ▶</span>
+                                <select id="split-select-right" class="compare-scene-select" aria-label="Select right split scene"></select>
+                            </div>
+                        </div>
+                        <div id="map-compare-split" class="compare-map split-map-wrapper">
+                            <input type="range" id="split-slider" min="0" max="100" value="50" class="split-slider-input" aria-label="Swipe comparison slider">
+                            <div id="split-slider-line" class="split-slider-line">
+                                <div class="split-slider-handle">↔</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View 3: Multi-Grid Maps (All fetched scenes synced) -->
+                <div id="view-multi-grid" class="compare-view hidden">
+                    <div id="multi-grid-container" class="multi-grid-container">
+                        <!-- Dynamically filled by JS with 2, 3, or 4 synced maps -->
+                    </div>
+                </div>
+
+                <!-- View 4: Data Matrix Table -->
+                <div id="view-data-table" class="compare-view hidden">
+                    <div id="fetched-table-area" class="compare-table-area">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>

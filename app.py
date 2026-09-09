@@ -128,8 +128,9 @@ async def get_products():
 @app.post("/api/process")
 async def process_data(req: ProcessRequest):
     """
-    Accept bbox + product + date range, run the Sentinel pipeline, and
-    return paths to the generated raster and CSV.
+    Search the Sentinel catalog for the given bbox + product + date range.
+    Returns a list of matching scenes and saves scene CSV.
+    Does NOT auto-fetch any raster — the user picks which scene to fetch.
     """
     if req.product_id not in PRODUCTS:
         raise HTTPException(400, f"Invalid product_id: {req.product_id}")
@@ -160,52 +161,17 @@ async def process_data(req: ProcessRequest):
             "Try widening the area or the date range.",
         )
 
-    # 2b. Pick the best scene (lowest cloud cover) so the Process API
-    #     fetches clear imagery instead of the most-recent (often cloudy) one.
-    best_scene = None
-    if product["has_cloud_filter"]:
-        scored = []
-        for s in scenes:
-            cc = s.get("properties", {}).get("eo:cloud_cover")
-            scored.append((cc if cc is not None else 100, s))
-        scored.sort(key=lambda x: x[0])
-        best_scene = scored[0][1]
-    else:
-        best_scene = scenes[0]
-
-    # Use the best scene's date for a tight 1-day window so the Process
-    # API doesn't mosaic with cloudier imagery from other dates.
-    best_dt = best_scene.get("properties", {}).get("datetime", "")
-    if best_dt:
-        best_date = best_dt[:10]          # "YYYY-MM-DD"
-        fetch_from = best_date
-        fetch_to = best_date
-    else:
-        fetch_from = req.date_from
-        fetch_to = req.date_to
-
     # 3. Build output paths & save scene CSV
     output_path, csv_path = build_run_paths(
         product["mission"], product["label"], req.bbox, product["extension"],
     )
     save_scenes_csv(scenes, csv_path)
 
-    # 4. Fetch processed raster using the best scene's date
-    try:
-        data_bytes = fetch_product(
-            token, product, req.bbox, fetch_from, fetch_to,
-        )
-        with open(output_path, "wb") as f:
-            f.write(data_bytes)
-    except Exception as e:
-        raise HTTPException(502, f"Data processing failed: {e}")
-
-    # 5. Build response
-    raster_rel = os.path.relpath(output_path, OUTPUT_DIR)
+    # 4. Build response — scenes only, no raster
     csv_rel = os.path.relpath(csv_path, OUTPUT_DIR)
 
     scene_summaries = []
-    for s in scenes[:10]:
+    for s in scenes[:20]:
         props = s.get("properties", {})
         scene_summaries.append({
             "id": s.get("id", "N/A"),
@@ -214,13 +180,10 @@ async def process_data(req: ProcessRequest):
             "cloud_cover": props.get("eo:cloud_cover"),
         })
 
-    best_props = best_scene.get("properties", {})
-
     return JSONResponse({
         "success": True,
         "scenes_count": len(scenes),
         "scenes": scene_summaries,
-        "raster_path": raster_rel,
         "csv_path": csv_rel,
         "bbox": req.bbox,
         "product_id": req.product_id,
@@ -228,13 +191,121 @@ async def process_data(req: ProcessRequest):
             "mission": product["mission"],
             "label": product["label"],
             "format": product["format"],
-        },
-        "best_scene": {
-            "id": best_scene.get("id", "N/A"),
-            "datetime": best_props.get("datetime", ""),
-            "cloud_cover": best_props.get("eo:cloud_cover"),
+            "extension": product["extension"],
         },
     })
+
+
+class FetchSceneRequest(BaseModel):
+    bbox: List[float]
+    product_id: str
+    scene_date: str  # "YYYY-MM-DD" — the specific scene date to fetch
+
+
+@app.post("/api/fetch-scene")
+async def fetch_scene(req: FetchSceneRequest):
+    """
+    Fetch the processed raster for a specific scene date.
+    Called when the user clicks 'Fetch' on a particular scene.
+    """
+    if req.product_id not in PRODUCTS:
+        raise HTTPException(400, f"Invalid product_id: {req.product_id}")
+    if len(req.bbox) != 4:
+        raise HTTPException(400, "bbox must have exactly 4 values")
+
+    product = PRODUCTS[req.product_id]
+
+    # Authenticate
+    try:
+        token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+    except Exception as e:
+        raise HTTPException(500, f"Authentication failed: {e}")
+
+    # Fetch raster for the exact date (1-day window)
+    output_path, _ = build_run_paths(
+        product["mission"], product["label"], req.bbox, product["extension"],
+    )
+
+    try:
+        data_bytes = fetch_product(
+            token, product, req.bbox, req.scene_date, req.scene_date,
+        )
+        with open(output_path, "wb") as f:
+            f.write(data_bytes)
+    except Exception as e:
+        raise HTTPException(502, f"Data processing failed: {e}")
+
+    raster_rel = os.path.relpath(output_path, OUTPUT_DIR)
+
+    return JSONResponse({
+        "success": True,
+        "raster_path": raster_rel,
+        "bbox": req.bbox,
+        "product_id": req.product_id,
+    })
+
+
+@app.get("/api/runs")
+async def list_runs():
+    """Return metadata for every past run stored in the output directory."""
+    import re
+    from datetime import datetime as _dt
+
+    runs = []
+    if not os.path.isdir(OUTPUT_DIR):
+        return JSONResponse(runs)
+
+    for name in sorted(os.listdir(OUTPUT_DIR), reverse=True):
+        run_dir = os.path.join(OUTPUT_DIR, name)
+        if not os.path.isdir(run_dir):
+            continue
+
+        # Find the scenes CSV inside the run folder
+        csv_file = None
+        for f in os.listdir(run_dir):
+            if f.endswith("_scenes.csv"):
+                csv_file = f
+                break
+        if not csv_file:
+            continue
+
+        # Parse folder name: Mission_Product_W_S_E_N_YYYYMMDD_HHMMSS
+        # e.g. Sentinel2_NDVI_72.1325_21.7563_72.1555_21.7761_20260908_163504
+        # or   Sentinel5P_CO_73.4930_22.2383_73.8776_22.5620_20260909_111427
+        m = re.match(
+            r'^(Sentinel\d+\w?)_(.+?)_'
+            r'(-?\d+\.\d{4})_(-?\d+\.\d{4})_(-?\d+\.\d{4})_(-?\d+\.\d{4})_'
+            r'(\d{8})_(\d{6})$',
+            name,
+        )
+        if not m:
+            continue
+
+        mission_raw, product_raw = m.group(1), m.group(2)
+        west, south, east, north = float(m.group(3)), float(m.group(4)), float(m.group(5)), float(m.group(6))
+        ts_str = m.group(7) + m.group(8)
+
+        # Pretty-format mission (Sentinel2 -> Sentinel-2)
+        mission = re.sub(r'(Sentinel)(\d)', r'\1-\2', mission_raw)
+        product_label = product_raw.replace("_", " ")
+
+        try:
+            fetched_at = _dt.strptime(ts_str, "%Y%m%d%H%M%S").isoformat()
+        except ValueError:
+            fetched_at = ""
+
+        csv_rel = os.path.join(name, csv_file)
+
+        runs.append({
+            "id": name,
+            "mission": mission,
+            "product": product_label,
+            "bbox": [west, south, east, north],
+            "fetched_at": fetched_at,
+            "csv_path": csv_rel,
+        })
+
+    return JSONResponse(runs)
 
 
 @app.get("/api/download/{filepath:path}")

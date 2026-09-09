@@ -9,6 +9,20 @@ let drawnItems;
 let currentBbox   = null;
 let currentOverlay = null;
 let products      = {};
+let compareSelectedRuns = [];
+
+// Fetched scenes comparison state
+let fetchedScenes = [];
+let leftMap = null, rightMap = null, splitMap = null;
+let gridMaps = [];
+let leftOverlay = null, rightOverlay = null, splitOverlayLeft = null, splitOverlayRight = null;
+let isSyncingMaps = false;
+
+// Color palette for comparison source badges
+const COMPARE_COLORS = [
+    "#818cf8", "#06b6d4", "#10b981", "#f59e0b",
+    "#ef4444", "#ec4899", "#8b5cf6", "#14b8a6",
+];
 
 // ── Bootstrap ────────────────────────────────────────────────────
 
@@ -193,8 +207,38 @@ function initEventListeners() {
     document.getElementById("csv-modal").addEventListener("click", (e) => {
         if (e.target === e.currentTarget) closeCsvModal();
     });
+
+    // Compare modal handlers (past runs)
+    document.getElementById("compare-btn").addEventListener("click", openCompareModal);
+    document.getElementById("compare-modal-close").addEventListener("click", closeCompareModal);
+    document.getElementById("compare-modal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeCompareModal();
+    });
+    document.getElementById("compare-execute-btn").addEventListener("click", executeComparison);
+
+    // Fetched scenes comparison modal handlers
+    document.getElementById("fetched-compare-modal-close").addEventListener("click", closeFetchedCompareModal);
+    document.getElementById("fetched-compare-modal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeFetchedCompareModal();
+    });
+    document.getElementById("tab-side-by-side").addEventListener("click", () => switchFetchedCompareTab("side-by-side"));
+    document.getElementById("tab-split-slider").addEventListener("click", () => switchFetchedCompareTab("split-slider"));
+    document.getElementById("tab-multi-grid").addEventListener("click", () => switchFetchedCompareTab("multi-grid"));
+    document.getElementById("tab-data-table").addEventListener("click", () => switchFetchedCompareTab("data-table"));
+
+    // Dropdown select change listeners
+    document.getElementById("compare-select-left").addEventListener("change", onCompareDropdownChange);
+    document.getElementById("compare-select-right").addEventListener("change", onCompareDropdownChange);
+    document.getElementById("split-select-left").addEventListener("change", onSplitDropdownChange);
+    document.getElementById("split-select-right").addEventListener("change", onSplitDropdownChange);
+
+    // Escape closes any open modal
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeCsvModal();
+        if (e.key === "Escape") {
+            closeCsvModal();
+            closeCompareModal();
+            closeFetchedCompareModal();
+        }
     });
 }
 
@@ -216,6 +260,10 @@ async function fetchData() {
     const dateTo    = document.getElementById("date-to").value;
 
     if (!currentBbox || !productId || !dateFrom || !dateTo) return;
+
+    // Reset current session fetched scenes
+    fetchedScenes = [];
+    updateFetchedCompareBar();
 
     const btn       = document.getElementById("fetch-btn");
     const statusEl  = document.getElementById("status-area");
@@ -259,19 +307,9 @@ function showResults(data) {
     const area    = document.getElementById("results-area");
     const content = document.getElementById("results-content");
 
+    // Store data on the area element for later use by fetchScene
+    area._data = data;
     area.classList.remove("hidden");
-
-    const ext = data.raster_path.split(".").pop().toUpperCase();
-
-    // Best scene info
-    const bestDate = data.best_scene?.datetime
-        ? new Date(data.best_scene.datetime).toLocaleDateString("en-US", {
-              year: "numeric", month: "short", day: "numeric",
-          })
-        : "";
-    const bestCloud = data.best_scene?.cloud_cover != null
-        ? ` · ☁️ ${data.best_scene.cloud_cover}%`
-        : "";
 
     let html = `
         <div class="result-stat">
@@ -282,34 +320,20 @@ function showResults(data) {
             <span class="stat-icon">📊</span>
             <span><span class="stat-value">${data.scenes_count}</span> scene(s) found</span>
         </div>
-        <div class="result-stat">
-            <span class="stat-icon">✅</span>
-            <span>Best scene: <span class="stat-value">${bestDate}</span>${bestCloud}</span>
-        </div>
 
-        <a class="download-btn" href="/api/download/${encodeURI(data.raster_path)}" download>
-            <span>📥</span><span>Download ${ext}</span>
-        </a>
         <a class="download-btn" href="/api/download/${encodeURI(data.csv_path)}" download>
             <span>📥</span><span>Download Scene CSV</span>
         </a>
-
-        <button class="preview-btn" id="preview-btn"
-                data-path="${data.raster_path}"
-                data-bbox="${data.bbox.join(",")}"
-                data-pid="${data.product_id}">
-            <span>🗺️</span><span>Preview on Map</span>
-        </button>
         <button class="csv-preview-btn" id="csv-preview-btn"
                 data-csv="${data.csv_path}">
             <span>👁️</span><span>Preview CSV</span>
         </button>
     `;
 
-    // Scene list
+    // Scene list with Fetch buttons
     if (data.scenes?.length) {
         html += '<div class="scene-list">';
-        data.scenes.forEach((s) => {
+        data.scenes.forEach((s, idx) => {
             const dateStr = s.datetime
                 ? new Date(s.datetime).toLocaleDateString("en-US", {
                       year: "numeric", month: "short", day: "numeric",
@@ -318,11 +342,24 @@ function showResults(data) {
                 : "N/A";
             const cloud =
                 s.cloud_cover != null ? `<div class="scene-cloud">☁️ ${s.cloud_cover}%</div>` : "";
+            const sceneDate = s.datetime ? s.datetime.split("T")[0] : "";
             html += `
-                <div class="scene-item">
-                    <div class="scene-date">${dateStr}</div>
-                    <div class="scene-id" title="${s.id}">${s.id}</div>
-                    ${cloud}
+                <div class="scene-item" id="scene-item-${idx}">
+                    <div class="scene-info-row">
+                        <div>
+                            <div class="scene-date">${dateStr}</div>
+                            <div class="scene-id" title="${s.id}">${s.id}</div>
+                            ${cloud}
+                        </div>
+                        <button class="scene-fetch-btn" id="scene-fetch-${idx}"
+                                data-scene-date="${sceneDate}"
+                                data-scene-idx="${idx}">
+                            📥 Fetch
+                        </button>
+                    </div>
+                    <div class="scene-actions hidden" id="scene-actions-${idx}">
+                        <!-- Filled after fetch -->
+                    </div>
                 </div>`;
         });
         html += "</div>";
@@ -330,16 +367,113 @@ function showResults(data) {
 
     content.innerHTML = html;
 
-    // Wire up preview button
-    document.getElementById("preview-btn").addEventListener("click", function () {
-        const bbox = this.dataset.bbox.split(",").map(Number);
-        showPreview(this.dataset.path, bbox, this.dataset.pid);
-    });
-
     // Wire up CSV preview button
     document.getElementById("csv-preview-btn").addEventListener("click", function () {
         previewCsv(this.dataset.csv);
     });
+
+    // Wire up all scene Fetch buttons
+    content.querySelectorAll(".scene-fetch-btn").forEach(btn => {
+        btn.addEventListener("click", function () {
+            fetchScene(this.dataset.sceneDate, +this.dataset.sceneIdx);
+        });
+    });
+}
+
+// ── Fetch a specific scene ───────────────────────────────────────
+
+async function fetchScene(sceneDate, sceneIdx) {
+    const data = document.getElementById("results-area")._data;
+    const btn = document.getElementById(`scene-fetch-${sceneIdx}`);
+    const actionsEl = document.getElementById(`scene-actions-${sceneIdx}`);
+    const itemEl = document.getElementById(`scene-item-${sceneIdx}`);
+
+    if (!sceneDate || !data) return;
+
+    // Show loading state
+    btn.disabled = true;
+    btn.textContent = "⏳ Fetching…";
+
+    try {
+        const res = await fetch("/api/fetch-scene", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                bbox: data.bbox,
+                product_id: data.product_id,
+                scene_date: sceneDate,
+            }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const result = await res.json();
+        const ext = result.raster_path.split(".").pop().toUpperCase();
+
+        // Replace Fetch button with success indicator
+        btn.textContent = "✅ Fetched";
+        btn.classList.add("scene-fetch-done");
+
+        // Show download + preview actions
+        actionsEl.classList.remove("hidden");
+        actionsEl.innerHTML = `
+            <a class="download-btn" href="/api/download/${encodeURI(result.raster_path)}" download>
+                <span>📥</span><span>Download ${ext}</span>
+            </a>
+            <button class="preview-btn scene-preview-btn"
+                    data-path="${result.raster_path}"
+                    data-bbox="${result.bbox.join(",")}"
+                    data-pid="${result.product_id}">
+                <span>🗺️</span><span>Preview on Map</span>
+            </button>
+        `;
+
+        // Wire up preview button
+        actionsEl.querySelector(".scene-preview-btn").addEventListener("click", function () {
+            const bbox = this.dataset.bbox.split(",").map(Number);
+            showPreview(this.dataset.path, bbox, this.dataset.pid);
+        });
+
+        // Highlight the fetched scene
+        itemEl.classList.add("scene-fetched");
+
+        // Save fetched scene info to state for dataset comparison
+        const sceneMeta = (data.scenes && data.scenes[sceneIdx]) ? data.scenes[sceneIdx] : {};
+        const fetchedItem = {
+            sceneIdx,
+            sceneDate,
+            datetime: sceneMeta.datetime || sceneDate,
+            cloudCover: sceneMeta.cloud_cover,
+            sceneId: sceneMeta.id || "N/A",
+            platform: sceneMeta.platform || "N/A",
+            rasterPath: result.raster_path,
+            bbox: result.bbox,
+            productId: result.product_id,
+            productLabel: data.product ? data.product.label : "Satellite Product",
+            mission: data.product ? data.product.mission : "Sentinel",
+        };
+
+        const existingIdx = fetchedScenes.findIndex(s => s.sceneDate === sceneDate);
+        if (existingIdx >= 0) {
+            fetchedScenes[existingIdx] = fetchedItem;
+        } else {
+            fetchedScenes.push(fetchedItem);
+        }
+
+        updateFetchedCompareBar();
+
+    } catch (err) {
+        btn.textContent = "❌ Failed";
+        btn.disabled = false;
+        btn.title = err.message;
+        setTimeout(() => {
+            btn.textContent = "📥 Retry";
+            btn.classList.remove("scene-fetch-done");
+        }, 2000);
+    }
 }
 
 // ── Map preview overlay ──────────────────────────────────────────
@@ -461,4 +595,570 @@ function escapeHtml(str) {
 
 function closeCsvModal() {
     document.getElementById("csv-modal").classList.add("hidden");
+}
+
+// ── Comparison Modal ──────────────────────────────────────────────
+
+async function openCompareModal() {
+    const modal    = document.getElementById("compare-modal");
+    const runList  = document.getElementById("compare-run-list");
+    const tableArea = document.getElementById("compare-table-area");
+
+    compareSelectedRuns = [];
+    runList.innerHTML = '<div class="csv-empty">Loading runs…</div>';
+    tableArea.innerHTML = '<div class="csv-empty">Select 2 or more runs to compare their scene metadata side by side.</div>';
+    document.getElementById("compare-execute-btn").disabled = true;
+    modal.classList.remove("hidden");
+
+    try {
+        const res = await fetch("/api/runs");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const runs = await res.json();
+
+        if (runs.length === 0) {
+            runList.innerHTML = '<div class="csv-empty">No past runs found in the output folder.</div>';
+            return;
+        }
+
+        // Group runs by "mission — product"
+        const groups = {};
+        runs.forEach(r => {
+            const key = `${r.mission} — ${r.product}`;
+            (groups[key] ??= []).push(r);
+        });
+
+        let html = '';
+        for (const [groupLabel, items] of Object.entries(groups)) {
+            html += `<div class="compare-group-label">${escapeHtml(groupLabel)} (${items.length})</div>`;
+            items.forEach(r => {
+                const dateStr = r.fetched_at
+                    ? new Date(r.fetched_at).toLocaleString("en-US", {
+                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                      })
+                    : "";
+                const bboxStr = r.bbox.map(v => v.toFixed(2)).join(", ");
+                html += `
+                    <label class="compare-run-item" data-run-id="${escapeHtml(r.id)}" data-csv="${escapeHtml(r.csv_path)}">
+                        <input type="checkbox" />
+                        <div class="compare-run-meta">
+                            <div class="compare-run-product">${escapeHtml(r.product)}</div>
+                            <div class="compare-run-details">${dateStr} · [${bboxStr}]</div>
+                        </div>
+                        <span class="compare-run-badge"></span>
+                    </label>`;
+            });
+        }
+        runList.innerHTML = html;
+
+        // Wire up checkboxes
+        runList.querySelectorAll(".compare-run-item").forEach(item => {
+            const cb = item.querySelector("input[type=checkbox]");
+            cb.addEventListener("change", () => toggleRunSelection(item, cb.checked));
+        });
+
+    } catch (err) {
+        runList.innerHTML = `<div class="csv-empty">⚠️ Failed to load runs: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function toggleRunSelection(item, isChecked) {
+    const runId  = item.dataset.runId;
+    const csvPath = item.dataset.csv;
+
+    if (isChecked) {
+        if (!compareSelectedRuns.find(r => r.id === runId)) {
+            compareSelectedRuns.push({ id: runId, csv: csvPath });
+        }
+        item.classList.add("selected");
+    } else {
+        compareSelectedRuns = compareSelectedRuns.filter(r => r.id !== runId);
+        item.classList.remove("selected");
+    }
+
+    // Assign colors to selected runs and update badges
+    const allItems = document.querySelectorAll(".compare-run-item");
+    allItems.forEach(el => {
+        const badge = el.querySelector(".compare-run-badge");
+        const idx = compareSelectedRuns.findIndex(r => r.id === el.dataset.runId);
+        if (idx >= 0) {
+            badge.style.backgroundColor = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+        }
+    });
+
+    // Update execute button
+    const btn = document.getElementById("compare-execute-btn");
+    const count = compareSelectedRuns.length;
+    btn.disabled = count < 2;
+    btn.querySelector(".btn-text").textContent = count >= 2
+        ? `Compare Selected (${count})`
+        : "Compare Selected";
+}
+
+async function executeComparison() {
+    const tableArea = document.getElementById("compare-table-area");
+    tableArea.innerHTML = '<div class="csv-empty">Loading and merging data…</div>';
+
+    // Key columns to show in comparison
+    const SHOW_COLS = ["scene_id", "datetime", "platform", "cloud_cover_percent", "s5p_product_type", "orbit_state"];
+    const COL_LABELS = {
+        scene_id: "Scene ID",
+        datetime: "Date / Time",
+        platform: "Platform",
+        cloud_cover_percent: "Cloud %",
+        s5p_product_type: "S5P Type",
+        orbit_state: "Orbit",
+    };
+
+    try {
+        // Fetch all CSVs in parallel
+        const results = await Promise.all(
+            compareSelectedRuns.map(async (run, idx) => {
+                const res = await fetch(`/api/download/${encodeURI(run.csv)}`);
+                if (!res.ok) throw new Error(`Failed to fetch ${run.id}`);
+                const text = await res.text();
+                const rows = text.trim().split("\n").map(parseCsvLine).filter(r => r.length > 0);
+                return { run, idx, headers: rows[0] || [], dataRows: rows.slice(1) };
+            })
+        );
+
+        // Merge all rows into a single array with source info
+        const merged = [];
+        results.forEach(({ run, idx, headers, dataRows }) => {
+            const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+            // Build a short label for the source
+            const parts = run.id.split("_");
+            const label = parts.slice(0, 2).join(" ").replace(/Sentinel(\d)/, "S-$1");
+
+            dataRows.forEach(row => {
+                const rowObj = {};
+                headers.forEach((h, i) => {
+                    rowObj[h] = row[i] ?? "";
+                });
+                rowObj.__source_label = label;
+                rowObj.__source_color = color;
+                rowObj.__source_idx = idx;
+                merged.push(rowObj);
+            });
+        });
+
+        // Sort by datetime (ascending)
+        merged.sort((a, b) => {
+            const da = a.datetime || "";
+            const db = b.datetime || "";
+            return da.localeCompare(db);
+        });
+
+        if (merged.length === 0) {
+            tableArea.innerHTML = '<div class="csv-empty">No scene data found in selected runs.</div>';
+            return;
+        }
+
+        // Determine which columns to show (only those that have data)
+        const activeCols = SHOW_COLS.filter(col =>
+            merged.some(r => r[col] && r[col] !== "" && r[col] !== "N/A")
+        );
+
+        // Build table
+        let html = '<table class="csv-table"><thead><tr>';
+        html += '<th>Source</th>';
+        activeCols.forEach(col => {
+            html += `<th>${COL_LABELS[col] || col}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        merged.forEach(row => {
+            html += '<tr>';
+            // Source badge
+            html += `<td>
+                <span class="source-badge">
+                    <span class="source-dot" style="background:${row.__source_color}"></span>
+                    ${escapeHtml(row.__source_label)}
+                </span>
+            </td>`;
+
+            activeCols.forEach(col => {
+                let val = row[col] ?? "";
+                // Format datetime nicely
+                if (col === "datetime" && val) {
+                    try {
+                        val = new Date(val).toLocaleString("en-US", {
+                            year: "numeric", month: "short", day: "numeric",
+                            hour: "2-digit", minute: "2-digit",
+                        });
+                    } catch (_) { /* keep raw */ }
+                }
+                // Truncate long scene IDs
+                if (col === "scene_id" && val.length > 40) {
+                    const short = val.substring(0, 38) + "…";
+                    html += `<td title="${escapeHtml(val)}">${escapeHtml(short)}</td>`;
+                } else {
+                    html += `<td>${escapeHtml(val)}</td>`;
+                }
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        tableArea.innerHTML = html;
+
+    } catch (err) {
+        tableArea.innerHTML = `<div class="csv-empty">⚠️ Comparison failed: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function closeCompareModal() {
+    document.getElementById("compare-modal").classList.add("hidden");
+}
+
+// ── Fetched Scenes Comparison ──────────────────────────────────────
+
+function updateFetchedCompareBar() {
+    let bar = document.getElementById("compare-fetched-bar");
+    const content = document.getElementById("results-content");
+    if (!content) return;
+
+    if (fetchedScenes.length < 2) {
+        if (bar) bar.remove();
+        return;
+    }
+
+    if (!bar) {
+        bar = document.createElement("div");
+        bar.id = "compare-fetched-bar";
+        bar.className = "compare-fetched-bar";
+        content.insertBefore(bar, content.firstChild);
+    }
+
+    bar.innerHTML = `
+        <span class="compare-fetched-bar-text">⚖️ ${fetchedScenes.length} fetched scenes ready to compare</span>
+        <button id="trigger-fetched-compare-btn" class="compare-fetched-bar-btn">
+            <span>Compare Scenes (${fetchedScenes.length})</span>
+        </button>
+    `;
+
+    document.getElementById("trigger-fetched-compare-btn").onclick = openFetchedCompareModal;
+}
+
+function populateSceneDropdowns(sortedScenes, selectedLeftIdx, selectedRightIdx) {
+    const selLeft = document.getElementById("compare-select-left");
+    const selRight = document.getElementById("compare-select-right");
+    const splitLeft = document.getElementById("split-select-left");
+    const splitRight = document.getElementById("split-select-right");
+
+    const fmtOpt = { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
+
+    function buildOptions(currentIdx) {
+        return sortedScenes.map((s, idx) => {
+            const dStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
+            const sel = idx === currentIdx ? "selected" : "";
+            return `<option value="${idx}" ${sel}>${escapeHtml(dStr)} (${s.platform || 'Scene'})</option>`;
+        }).join("");
+    }
+
+    selLeft.innerHTML = buildOptions(selectedLeftIdx);
+    selRight.innerHTML = buildOptions(selectedRightIdx);
+    splitLeft.innerHTML = buildOptions(selectedLeftIdx);
+    splitRight.innerHTML = buildOptions(selectedRightIdx);
+}
+
+function onCompareDropdownChange() {
+    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const leftIdx = +document.getElementById("compare-select-left").value;
+    const rightIdx = +document.getElementById("compare-select-right").value;
+
+    const sceneA = sorted[leftIdx] || sorted[0];
+    const sceneB = sorted[rightIdx] || sorted[sorted.length - 1];
+
+    initDualMaps(sceneA, sceneB);
+}
+
+function onSplitDropdownChange() {
+    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const leftIdx = +document.getElementById("split-select-left").value;
+    const rightIdx = +document.getElementById("split-select-right").value;
+
+    const sceneA = sorted[leftIdx] || sorted[0];
+    const sceneB = sorted[rightIdx] || sorted[sorted.length - 1];
+
+    initSplitSlider(sceneA, sceneB);
+}
+
+function openFetchedCompareModal() {
+    if (fetchedScenes.length < 2) return;
+
+    const modal = document.getElementById("fetched-compare-modal");
+    modal.classList.remove("hidden");
+
+    // Sort fetched scenes chronologically by acquisition timestamp
+    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const sceneA = sorted[0];
+    const sceneB = sorted[sorted.length - 1];
+
+    populateSceneDropdowns(sorted, 0, sorted.length - 1);
+
+    document.getElementById("fetched-compare-subtitle").textContent =
+        `${sceneA.mission} ${sceneA.productLabel} — ${fetchedScenes.length} fetched scenes available for comparison`;
+
+    switchFetchedCompareTab("side-by-side", sceneA, sceneB);
+}
+
+function switchFetchedCompareTab(tabName, sceneAOverride, sceneBOverride) {
+    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+
+    const selLeft = document.getElementById("compare-select-left");
+    const selRight = document.getElementById("compare-select-right");
+
+    const leftIdx = (selLeft && selLeft.value !== "") ? +selLeft.value : 0;
+    const rightIdx = (selRight && selRight.value !== "") ? +selRight.value : sorted.length - 1;
+
+    const sceneA = sceneAOverride || sorted[leftIdx] || sorted[0];
+    const sceneB = sceneBOverride || sorted[rightIdx] || sorted[sorted.length - 1];
+
+    ["side-by-side", "split-slider", "multi-grid", "data-table"].forEach((t) => {
+        const btn = document.getElementById(`tab-${t}`);
+        const view = document.getElementById(`view-${t}`);
+        if (!btn || !view) return;
+        if (t === tabName) {
+            btn.classList.add("active");
+            view.classList.remove("hidden");
+        } else {
+            btn.classList.remove("active");
+            view.classList.add("hidden");
+        }
+    });
+
+    if (tabName === "side-by-side") {
+        setTimeout(() => initDualMaps(sceneA, sceneB), 100);
+    } else if (tabName === "split-slider") {
+        setTimeout(() => initSplitSlider(sceneA, sceneB), 100);
+    } else if (tabName === "multi-grid") {
+        setTimeout(() => initMultiGridMaps(sorted), 100);
+    } else if (tabName === "data-table") {
+        renderFetchedDataTable(sorted);
+    }
+}
+
+function initDualMaps(sceneA, sceneB) {
+    const bbox = sceneA.bbox;
+    const bounds = [
+        [bbox[1], bbox[0]],
+        [bbox[3], bbox[2]],
+    ];
+    const center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+
+    if (leftMap) { leftMap.remove(); leftMap = null; }
+    if (rightMap) { rightMap.remove(); rightMap = null; }
+
+    leftMap = L.map("map-compare-left", { center, zoom: 10, zoomControl: true });
+    rightMap = L.map("map-compare-right", { center, zoom: 10, zoomControl: true });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(leftMap);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(rightMap);
+
+    const urlA = `/api/preview/${encodeURI(sceneA.rasterPath)}?product_id=${sceneA.productId}`;
+    const urlB = `/api/preview/${encodeURI(sceneB.rasterPath)}?product_id=${sceneB.productId}`;
+
+    leftOverlay = L.imageOverlay(urlA, bounds, { opacity: 0.9 }).addTo(leftMap);
+    rightOverlay = L.imageOverlay(urlB, bounds, { opacity: 0.9 }).addTo(rightMap);
+
+    leftMap.fitBounds(bounds, { padding: [30, 30] });
+    rightMap.fitBounds(bounds, { padding: [30, 30] });
+
+    function sync(sourceMap, targetMap) {
+        sourceMap.on("move", () => {
+            if (isSyncingMaps) return;
+            isSyncingMaps = true;
+            targetMap.setView(sourceMap.getCenter(), sourceMap.getZoom(), { animate: false });
+            isSyncingMaps = false;
+        });
+    }
+    sync(leftMap, rightMap);
+    sync(rightMap, leftMap);
+
+    setTimeout(() => {
+        if (leftMap) leftMap.invalidateSize();
+        if (rightMap) rightMap.invalidateSize();
+    }, 150);
+}
+
+function initSplitSlider(sceneA, sceneB) {
+    const bbox = sceneA.bbox;
+    const bounds = [
+        [bbox[1], bbox[0]],
+        [bbox[3], bbox[2]],
+    ];
+    const center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+
+    if (splitMap) { splitMap.remove(); splitMap = null; }
+
+    splitMap = L.map("map-compare-split", { center, zoom: 10, zoomControl: true });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(splitMap);
+
+    const urlA = `/api/preview/${encodeURI(sceneA.rasterPath)}?product_id=${sceneA.productId}`;
+    const urlB = `/api/preview/${encodeURI(sceneB.rasterPath)}?product_id=${sceneB.productId}`;
+
+    splitOverlayLeft = L.imageOverlay(urlA, bounds, { opacity: 0.95 }).addTo(splitMap);
+    splitOverlayRight = L.imageOverlay(urlB, bounds, { opacity: 0.95 }).addTo(splitMap);
+
+    splitMap.fitBounds(bounds, { padding: [30, 30] });
+
+    const slider = document.getElementById("split-slider");
+    const line = document.getElementById("split-slider-line");
+
+    function updateClip() {
+        const val = slider.value;
+        line.style.left = `${val}%`;
+
+        const elRight = splitOverlayRight.getElement();
+        if (elRight) {
+            elRight.style.clipPath = `polygon(${val}% 0, 100% 0, 100% 100%, ${val}% 100%)`;
+        }
+    }
+
+    slider.oninput = updateClip;
+
+    setTimeout(() => {
+        if (splitMap) splitMap.invalidateSize();
+        updateClip();
+    }, 150);
+}
+
+function initMultiGridMaps(sortedScenes) {
+    const container = document.getElementById("multi-grid-container");
+    container.innerHTML = "";
+
+    gridMaps.forEach(m => { try { m.remove(); } catch (_) {} });
+    gridMaps = [];
+
+    const scenesToDisplay = sortedScenes.slice(0, 4);
+    const count = scenesToDisplay.length;
+    container.className = `multi-grid-container grid-${count}`;
+
+    const fmtOpt = { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
+
+    scenesToDisplay.forEach((s, idx) => {
+        const dateStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
+        const panel = document.createElement("div");
+        panel.className = "map-panel";
+        panel.innerHTML = `
+            <div class="map-panel-header">
+                <span class="badge badge-left">Scene ${idx + 1}</span>
+                <span class="panel-date">${escapeHtml(dateStr)}</span>
+            </div>
+            <div id="map-grid-${idx}" class="compare-map"></div>
+        `;
+        container.appendChild(panel);
+
+        const bbox = s.bbox;
+        const bounds = [
+            [bbox[1], bbox[0]],
+            [bbox[3], bbox[2]],
+        ];
+        const center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+
+        const gMap = L.map(`map-grid-${idx}`, { center, zoom: 10, zoomControl: true });
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(gMap);
+
+        const url = `/api/preview/${encodeURI(s.rasterPath)}?product_id=${s.productId}`;
+        L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(gMap);
+        gMap.fitBounds(bounds, { padding: [20, 20] });
+
+        gridMaps.push(gMap);
+    });
+
+    gridMaps.forEach((sourceMap) => {
+        sourceMap.on("move", () => {
+            if (isSyncingMaps) return;
+            isSyncingMaps = true;
+            gridMaps.forEach((targetMap) => {
+                if (targetMap !== sourceMap) {
+                    targetMap.setView(sourceMap.getCenter(), sourceMap.getZoom(), { animate: false });
+                }
+            });
+            isSyncingMaps = false;
+        });
+    });
+
+    setTimeout(() => {
+        gridMaps.forEach(m => m.invalidateSize());
+    }, 150);
+}
+
+function renderFetchedDataTable(sortedScenes) {
+    const area = document.getElementById("fetched-table-area");
+    const fmtOpt = { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
+
+    let ths = sortedScenes.map((s, idx) => {
+        const dateStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
+        return `<th>Scene ${idx + 1}<br><span style="font-weight:normal; text-transform:none">${escapeHtml(dateStr)}</span></th>`;
+    }).join("");
+
+    let rowProduct = sortedScenes.map(s => `<td class="matrix-col-val">${escapeHtml(s.mission)} — ${escapeHtml(s.productLabel)}</td>`).join("");
+    let rowTime = sortedScenes.map(s => {
+        const dStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
+        return `<td class="matrix-col-val">${escapeHtml(dStr)}</td>`;
+    }).join("");
+    let rowCloud = sortedScenes.map(s => `<td class="matrix-col-val">${s.cloudCover != null ? s.cloudCover + '%' : 'N/A'}</td>`).join("");
+    let rowPlatform = sortedScenes.map(s => `<td class="matrix-col-val">${escapeHtml(s.platform)}</td>`).join("");
+    let rowId = sortedScenes.map(s => `<td class="matrix-col-val" style="font-size:11px; word-break:break-all">${escapeHtml(s.sceneId)}</td>`).join("");
+    let rowBbox = sortedScenes.map(s => `<td class="matrix-col-val">[${s.bbox.join(", ")}]</td>`).join("");
+    let rowDownload = sortedScenes.map(s => `
+        <td>
+            <a class="download-btn" href="/api/download/${encodeURI(s.rasterPath)}" download>
+                📥 Download
+            </a>
+        </td>
+    `).join("");
+
+    area.innerHTML = `
+        <div class="matrix-table-wrapper" style="max-width: none">
+            <table class="matrix-table">
+                <thead>
+                    <tr>
+                        <th>Metadata Parameter</th>
+                        ${ths}
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Mission &amp; Product</td>
+                        ${rowProduct}
+                    </tr>
+                    <tr>
+                        <td>Acquisition Time</td>
+                        ${rowTime}
+                    </tr>
+                    <tr>
+                        <td>Cloud Cover</td>
+                        ${rowCloud}
+                    </tr>
+                    <tr>
+                        <td>Platform / Satellite</td>
+                        ${rowPlatform}
+                    </tr>
+                    <tr>
+                        <td>Scene ID</td>
+                        ${rowId}
+                    </tr>
+                    <tr>
+                        <td>Bounding Box</td>
+                        ${rowBbox}
+                    </tr>
+                    <tr>
+                        <td>Download Raster</td>
+                        ${rowDownload}
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function closeFetchedCompareModal() {
+    document.getElementById("fetched-compare-modal").classList.add("hidden");
+    if (leftMap) { leftMap.remove(); leftMap = null; }
+    if (rightMap) { rightMap.remove(); rightMap = null; }
+    if (splitMap) { splitMap.remove(); splitMap = null; }
+    gridMaps.forEach(m => { try { m.remove(); } catch (_) {} });
+    gridMaps = [];
 }
