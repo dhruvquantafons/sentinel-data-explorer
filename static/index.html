@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Data Explorer — QuantaFONS</title>
-    <meta name="description" content="Interactive satellite data explorer for Sentinel-1, 2, 3, and 5P missions. Draw an area on the map and fetch NDVI, NDWI, True Color, SAR, and atmospheric data.">
+    <title>TeraVerify — Satellite Verification Platform</title>
+    <meta name="description" content="TeraVerify — Interactive satellite data verification platform for Sentinel-1, 2, 3, and 5P missions. Draw an area on the map and fetch NDVI, NDWI, True Color, SAR, and atmospheric data.">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,10 +25,10 @@
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <span class="logo-icon">🛰️</span>
+                    <span class="logo-icon">🔬</span>
                     <div>
-                        <h1>Sentinel Explorer</h1>
-                        <p class="tagline">QuantaFONS Satellite Data</p>
+                        <h1>TeraVerify</h1>
+                        <p class="tagline">Satellite Verification Platform</p>
                     </div>
                 </div>
             </div>
@@ -106,6 +106,22 @@
 
         <!-- ── Map ─────────────────────────────────────── -->
         <div id="map" class="map"></div>
+    </div>
+
+    <!-- CSV Preview Modal -->
+    <div id="csv-modal" class="csv-modal-overlay hidden">
+        <div class="csv-modal">
+            <div class="csv-modal-header">
+                <div class="csv-modal-title">
+                    <span>📋</span>
+                    <span>Scene Metadata Preview</span>
+                </div>
+                <button id="csv-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
+            </div>
+            <div id="csv-modal-body" class="csv-modal-body">
+                <!-- Table injected by JS -->
+            </div>
+        </div>
     </div>
 
     <!-- Leaflet JS -->

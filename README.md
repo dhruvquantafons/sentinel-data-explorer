@@ -1,8 +1,6 @@
-# 🛰️ Sentinel Data Explorer
+# 🔬 TeraVerify
 
-An interactive web application and Python API wrapper for searching, processing, visualizing, and downloading satellite imagery from the **Copernicus Data Space Ecosystem (CDSE)**.
-
-![Sentinel Data Explorer](static/css/style.css)
+An interactive web application and Python API wrapper for searching, processing, verifying, visualizing, and downloading satellite imagery from the **Copernicus Data Space Ecosystem (CDSE)**.
 
 ---
 
@@ -16,6 +14,7 @@ An interactive web application and Python API wrapper for searching, processing,
   - **Sentinel-1 (Radar SAR)**: Synthetic Aperture Radar (IW VV+VH backscatter in dB).
 - **Smart Cloud Cover Selection**: Automatically scans the catalog for the best (lowest cloud cover %) available scene within the selected date range.
 - **Map Overlay Previews**: Instant visual preview overlay of processed raster data directly on the map.
+- **CSV Preview**: View scene metadata directly in the browser with a glassmorphism-styled table modal — no download needed.
 - **GIS-Ready Downloads**: Generates 32-bit floating-point GeoTIFF images and CSV scene metadata for downstream GIS analysis (QGIS, ArcGIS, Python).
 - **RESTful API**: Fast and clean API built with **FastAPI**.
 
@@ -36,8 +35,8 @@ Ensure you have Python 3.9+ installed and a valid **Copernicus Data Space Ecosys
 
 ### 2. Clone the Repository
 ```bash
-git clone https://github.com/dhruvquantafons/sentinel-data-explorer.git
-cd sentinel-data-explorer
+git clone https://github.com/dhruvquantafons/teraverify.git
+cd teraverify
 ```
 
 ### 3. Install Dependencies
@@ -106,7 +105,7 @@ This repository is pre-configured for one-click deployment on **Vercel** using `
 ## 📂 Project Structure
 
 ```
-sentinel-data-explorer/
+teraverify/
 ├── app.py                            # FastAPI backend server
 ├── sentinel_data_api_example_second.py # Core Sentinel Hub API processing pipeline
 ├── static/

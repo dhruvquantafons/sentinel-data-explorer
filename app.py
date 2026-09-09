@@ -1,5 +1,5 @@
 """
-FastAPI backend for Sentinel Data Explorer.
+FastAPI backend for TeraVerify.
 Wraps the existing sentinel_data_api_example_second.py pipeline as REST endpoints.
 """
 
@@ -30,7 +30,7 @@ from sentinel_data_api_example_second import (
 
 # ─── App setup ───────────────────────────────────────────────────────
 
-app = FastAPI(title="Sentinel Data Explorer API")
+app = FastAPI(title="TeraVerify API")
 
 app.add_middleware(
     CORSMiddleware,

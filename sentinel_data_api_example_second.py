@@ -141,12 +141,22 @@ function evaluatePixel(s) { return [s.S8, s.S9]; }
 
 # ---------------------------------------------------------------------
 # Evalscript generator — Sentinel-5P (one band per gas/pollutant)
+# Uses dataMask to write NaN where no valid observation exists, which
+# prevents the garbage-float problem seen with raw S5P rasters.
 # ---------------------------------------------------------------------
 def s5p_evalscript(band_name: str) -> str:
     return f"""
 //VERSION=3
-function setup() {{ return {{ input: ["{band_name}"], output: {{ bands: 1, sampleType: "FLOAT32" }} }}; }}
-function evaluatePixel(s) {{ return [s.{band_name}]; }}
+function setup() {{
+  return {{
+    input: ["{band_name}", "dataMask"],
+    output: {{ bands: 1, sampleType: "FLOAT32" }}
+  }};
+}}
+function evaluatePixel(s) {{
+  if (s.dataMask === 0) return [NaN];
+  return [s.{band_name}];
+}}
 """
 
 
@@ -265,10 +275,24 @@ def fetch_product(token: str, product: dict, bbox: list, date_from: str,
     if product["has_cloud_filter"]:
         data_filter["maxCloudCoverage"] = 80
 
+    # Sentinel-5P needs explicit mosaicking + timeliness so the Process
+    # API actually returns valid atmospheric data instead of empty bytes.
+    is_s5p = product["collection"] == "sentinel-5p-l2"
+    if is_s5p:
+        data_filter["mosaickingOrder"] = "mostRecent"
+        data_filter["timeliness"] = "OFFL"
+
+    data_entry = {"type": product["collection"], "dataFilter": data_filter}
+
+    # S5P processing options: apply quality filter so only reliable
+    # measurements come through (qa_value >= 50%).
+    if is_s5p:
+        data_entry["processing"] = {"minQa": 50}
+
     payload = {
         "input": {
             "bounds": {"bbox": bbox},
-            "data": [{"type": product["collection"], "dataFilter": data_filter}],
+            "data": [data_entry],
         },
         "output": {
             "width": width,

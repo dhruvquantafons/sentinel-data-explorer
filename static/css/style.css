@@ -1,5 +1,5 @@
 /* ================================================================
-   Sentinel Data Explorer — Premium Dark Theme
+   TeraVerify — Premium Dark Theme
    ================================================================ */
 
 /* ── Design tokens ──────────────────────────────────────────────── */
@@ -519,4 +519,183 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 .results-area:not(.hidden) {
     animation: fadeSlide .4s var(--ease);
+}
+
+/* ── CSV Preview Modal ─────────────────────────────────────────── */
+.csv-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn .25s var(--ease);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.csv-modal {
+    width: min(92vw, 960px);
+    max-height: 82vh;
+    background: var(--bg-card);
+    backdrop-filter: blur(28px) saturate(1.4);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(99, 102, 241, 0.08);
+    display: flex;
+    flex-direction: column;
+    animation: modalSlideUp .3s var(--ease);
+    overflow: hidden;
+}
+
+@keyframes modalSlideUp {
+    from { opacity: 0; transform: translateY(24px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.csv-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg,
+        rgba(99, 102, 241, .10),
+        rgba(6, 182, 212, .06));
+    flex-shrink: 0;
+}
+
+.csv-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.csv-modal-title span:first-child {
+    font-size: 18px;
+}
+
+.csv-modal-close {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all var(--speed) var(--ease);
+}
+
+.csv-modal-close:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.csv-modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.csv-modal-body::-webkit-scrollbar { width: 5px; height: 5px; }
+.csv-modal-body::-webkit-scrollbar-track { background: transparent; }
+.csv-modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* CSV Table */
+.csv-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+
+.csv-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.csv-table th {
+    background: var(--bg-secondary);
+    color: var(--accent-end);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 10.5px;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+}
+
+.csv-table td {
+    padding: 8px 14px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+}
+
+.csv-table tbody tr:nth-child(even) {
+    background: rgba(30, 41, 59, 0.35);
+}
+
+.csv-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.csv-table tbody tr {
+    transition: background var(--speed) var(--ease);
+}
+
+.csv-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* Preview CSV button */
+.csv-preview-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 14px;
+    background: linear-gradient(135deg,
+        rgba(99, 102, 241, .10),
+        rgba(6, 182, 212, .10));
+    border: 1px solid rgba(99, 102, 241, .25);
+    border-radius: var(--radius-sm);
+    color: var(--accent-mid);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--speed) var(--ease);
+}
+
+.csv-preview-btn:hover {
+    background: linear-gradient(135deg,
+        rgba(99, 102, 241, .20),
+        rgba(6, 182, 212, .20));
+    border-color: var(--accent-start);
+    transform: translateX(4px);
 }

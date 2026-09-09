@@ -1,5 +1,5 @@
 /* ================================================================
-   Sentinel Data Explorer — Frontend Logic
+   TeraVerify — Frontend Logic
    ================================================================ */
 
 // ── State ────────────────────────────────────────────────────────
@@ -187,6 +187,15 @@ function initEventListeners() {
     document.getElementById("product-select").addEventListener("change", refreshFetchBtn);
     document.getElementById("fetch-btn").addEventListener("click", fetchData);
     document.getElementById("sidebar-toggle").addEventListener("click", toggleSidebar);
+
+    // CSV modal close handlers
+    document.getElementById("csv-modal-close").addEventListener("click", closeCsvModal);
+    document.getElementById("csv-modal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeCsvModal();
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeCsvModal();
+    });
 }
 
 function refreshFetchBtn() {
@@ -291,6 +300,10 @@ function showResults(data) {
                 data-pid="${data.product_id}">
             <span>🗺️</span><span>Preview on Map</span>
         </button>
+        <button class="csv-preview-btn" id="csv-preview-btn"
+                data-csv="${data.csv_path}">
+            <span>👁️</span><span>Preview CSV</span>
+        </button>
     `;
 
     // Scene list
@@ -321,6 +334,11 @@ function showResults(data) {
     document.getElementById("preview-btn").addEventListener("click", function () {
         const bbox = this.dataset.bbox.split(",").map(Number);
         showPreview(this.dataset.path, bbox, this.dataset.pid);
+    });
+
+    // Wire up CSV preview button
+    document.getElementById("csv-preview-btn").addEventListener("click", function () {
+        previewCsv(this.dataset.csv);
     });
 }
 
@@ -355,4 +373,92 @@ function showError(message) {
 
     area.classList.remove("hidden");
     content.innerHTML = `<div class="error-msg">⚠️ ${message}</div>`;
+}
+
+// ── CSV Preview Modal ──────────────────────────────────────────────
+
+async function previewCsv(csvPath) {
+    const modal = document.getElementById("csv-modal");
+    const body  = document.getElementById("csv-modal-body");
+
+    // Show loading state
+    body.innerHTML = '<div class="csv-empty">Loading CSV…</div>';
+    modal.classList.remove("hidden");
+
+    try {
+        const res = await fetch(`/api/download/${encodeURI(csvPath)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+
+        const rows = text.trim().split("\n").map(parseCsvLine).filter(r => r.length > 0);
+        if (rows.length === 0) {
+            body.innerHTML = '<div class="csv-empty">CSV file is empty.</div>';
+            return;
+        }
+
+        const headers = rows[0];
+        const dataRows = rows.slice(1);
+
+        let tableHtml = '<table class="csv-table"><thead><tr>';
+        headers.forEach(h => {
+            tableHtml += `<th>${escapeHtml(h)}</th>`;
+        });
+        tableHtml += '</tr></thead><tbody>';
+
+        dataRows.forEach(row => {
+            tableHtml += '<tr>';
+            headers.forEach((_, i) => {
+                tableHtml += `<td>${escapeHtml(row[i] ?? "")}</td>`;
+            });
+            tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+
+        body.innerHTML = tableHtml;
+    } catch (err) {
+        body.innerHTML = `<div class="csv-empty">⚠️ Failed to load CSV: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function parseCsvLine(line) {
+    const result = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"') {
+                if (i + 1 < line.length && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else {
+                current += ch;
+            }
+        } else {
+            if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === ',') {
+                result.push(current.trim());
+                current = "";
+            } else {
+                current += ch;
+            }
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function closeCsvModal() {
+    document.getElementById("csv-modal").classList.add("hidden");
 }
