@@ -95,7 +95,9 @@ PRODUCT_CMAP: dict[str, Optional[str]] = {
 }
 
 
-# ─── Request / response models ───────────────────────────────────────
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 class ProcessRequest(BaseModel):
     bbox: List[float]
@@ -104,11 +106,29 @@ class ProcessRequest(BaseModel):
     date_to: str
 
 
+# Demo credentials
+DEMO_USERNAME = "admin"
+DEMO_PASSWORD = "admin"
+
+
 # ─── Routes ──────────────────────────────────────────────────────────
 
 @app.get("/")
+async def login_page():
+    return FileResponse(os.path.join(STATIC_DIR, "login.html"))
+
+
+@app.get("/app")
 async def index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+@app.post("/api/login")
+async def login(req: LoginRequest):
+    """Demo login endpoint — accepts hardcoded credentials."""
+    if req.username == DEMO_USERNAME and req.password == DEMO_PASSWORD:
+        return JSONResponse({"success": True, "message": "Login successful"})
+    return JSONResponse({"success": False, "message": "Invalid credentials"}, status_code=401)
 
 
 @app.get("/api/products")
