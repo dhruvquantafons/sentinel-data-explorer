@@ -378,49 +378,117 @@ def build_run_paths(mission: str, product_label: str, bbox: list, extension: str
     )
 
 
-def format_metadata(value) -> str:
-    """Return catalogue values in a readable single-line form."""
-    if value is None:
-        return "N/A"
-    if isinstance(value, (list, dict)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
+def format_cell_value(val) -> str:
+    """Format catalogue cell values into clean, unclustered scalar strings."""
+    if val is None:
+        return ""
+    if isinstance(val, list):
+        if not val:
+            return ""
+        if all(isinstance(x, (str, int, float, bool)) for x in val):
+            return ", ".join(str(x) for x in val)
+        return json.dumps(val, ensure_ascii=False)
+    if isinstance(val, dict):
+        if not val:
+            return ""
+        items = []
+        for k, v in val.items():
+            if isinstance(v, (str, int, float, bool)):
+                items.append(f"{k}={v}")
+        if items:
+            return "; ".join(items)
+        return json.dumps(val, ensure_ascii=False)
+    return str(val)
 
 
 def save_scenes_csv(scenes: list, csv_path: str) -> None:
-    """Save useful common fields and complete catalogue metadata for all matching scenes."""
-    fieldnames = [
+    """
+    Save scene catalog metadata into a clean, unclustered CSV table.
+    Flattens geometry into distinct spatial columns (bbox, center, type)
+    and expands all STAC properties into individual columns instead of raw JSON blobs.
+    """
+    primary_fields = [
         "scene_id", "datetime", "platform", "constellation", "instruments",
         "collection", "cloud_cover_percent", "gsd_m", "orbit_state",
         "absolute_orbit", "relative_orbit", "epsg_code", "sar_polarizations",
-        "sar_mode", "s5p_product_type", "s5p_timeliness", "geometry", "all_properties",
+        "sar_mode", "s5p_product_type", "s5p_timeliness",
     ]
+
+    spatial_fields = [
+        "geometry_type", "bbox_west", "bbox_south", "bbox_east", "bbox_north",
+        "center_lon", "center_lat",
+    ]
+
+    # Handled keys to exclude from generic property expansion
+    handled_prop_keys = {
+        "datetime", "platform", "constellation", "instruments", "eo:cloud_cover",
+        "gsd", "sat:orbit_state", "sat:absolute_orbit", "sat:relative_orbit",
+        "proj:epsg", "sar:polarizations", "sar:instrument_mode", "s5p:type",
+        "s5p:timeliness",
+    }
+
+    rows = []
+    extra_prop_fields = set()
+
+    for scene in scenes:
+        props = scene.get("properties", {})
+        geom = scene.get("geometry", {})
+        bbox = scene.get("bbox", [])
+
+        # Parse spatial coordinates
+        geom_type = geom.get("type", "") if isinstance(geom, dict) else ""
+        b_west = b_south = b_east = b_north = c_lon = c_lat = ""
+        if isinstance(bbox, list) and len(bbox) == 4:
+            b_west, b_south, b_east, b_north = bbox[0], bbox[1], bbox[2], bbox[3]
+            c_lon = round((b_west + b_east) / 2, 6)
+            c_lat = round((b_south + b_north) / 2, 6)
+
+        row = {
+            "scene_id": scene.get("id", ""),
+            "datetime": props.get("datetime", ""),
+            "platform": props.get("platform", ""),
+            "constellation": props.get("constellation", ""),
+            "instruments": format_cell_value(props.get("instruments")),
+            "collection": ", ".join(scene.get("collection", []))
+            if isinstance(scene.get("collection"), list) else scene.get("collection", ""),
+            "cloud_cover_percent": props.get("eo:cloud_cover", "") if props.get("eo:cloud_cover") is not None else "",
+            "gsd_m": props.get("gsd", ""),
+            "orbit_state": props.get("sat:orbit_state", ""),
+            "absolute_orbit": props.get("sat:absolute_orbit", ""),
+            "relative_orbit": props.get("sat:relative_orbit", ""),
+            "epsg_code": props.get("proj:epsg", ""),
+            "sar_polarizations": format_cell_value(props.get("sar:polarizations")),
+            "sar_mode": props.get("sar:instrument_mode", ""),
+            "s5p_product_type": props.get("s5p:type", ""),
+            "s5p_timeliness": props.get("s5p:timeliness", ""),
+
+            # Unpacked spatial columns
+            "geometry_type": geom_type,
+            "bbox_west": b_west,
+            "bbox_south": b_south,
+            "bbox_east": b_east,
+            "bbox_north": b_north,
+            "center_lon": c_lon,
+            "center_lat": c_lat,
+        }
+
+        # Unpack remaining properties into individual clean columns
+        for k, v in props.items():
+            if k in handled_prop_keys:
+                continue
+            col_name = k.replace(":", "_").replace("-", "_")
+            extra_prop_fields.add(col_name)
+            row[col_name] = format_cell_value(v)
+
+        rows.append(row)
+
+    all_fieldnames = primary_fields + spatial_fields + sorted(extra_prop_fields)
+
     with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer = csv.DictWriter(csv_file, fieldnames=all_fieldnames, extrasaction="ignore")
         writer.writeheader()
-        for scene in scenes:
-            props = scene.get("properties", {})
-            writer.writerow({
-                "scene_id": scene.get("id", ""),
-                "datetime": props.get("datetime", ""),
-                "platform": props.get("platform", ""),
-                "constellation": props.get("constellation", ""),
-                "instruments": format_metadata(props.get("instruments")),
-                "collection": ", ".join(scene.get("collection", []))
-                if isinstance(scene.get("collection"), list) else scene.get("collection", ""),
-                "cloud_cover_percent": props.get("eo:cloud_cover", "") if props.get("eo:cloud_cover") is not None else "",
-                "gsd_m": props.get("gsd", ""),
-                "orbit_state": props.get("sat:orbit_state", ""),
-                "absolute_orbit": props.get("sat:absolute_orbit", ""),
-                "relative_orbit": props.get("sat:relative_orbit", ""),
-                "epsg_code": props.get("proj:epsg", ""),
-                "sar_polarizations": format_metadata(props.get("sar:polarizations")),
-                "sar_mode": props.get("sar:instrument_mode", ""),
-                "s5p_product_type": props.get("s5p:type", ""),
-                "s5p_timeliness": props.get("s5p:timeliness", ""),
-                "geometry": json.dumps(scene.get("geometry", {}), ensure_ascii=False),
-                "all_properties": json.dumps(props, ensure_ascii=False),
-            })
+        for r in rows:
+            writer.writerow(r)
 
 
 # ---------------------------------------------------------------------
