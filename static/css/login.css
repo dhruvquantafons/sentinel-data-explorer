@@ -1,35 +1,38 @@
 /* ================================================================
-   TeraVerify — Login Page Styles
+   TeraVerify — Login Page Styles (Light Theme — matches main app)
    ================================================================ */
 
-/* ── Design tokens (reuse from main app) ─────────────────────────── */
+/* ── Design tokens (matched from style.css) ──────────────────────── */
 :root {
-    --bg-primary:    #0a0e1a;
-    --bg-card:       rgba(255, 255, 255, 0.04);
-    --bg-card-hover: rgba(255, 255, 255, 0.08);
-    --bg-input:      rgba(255, 255, 255, 0.06);
+    --bg-primary:    #ffffff;
+    --bg-secondary:  #f8fafc;
+    --bg-card:       #ffffff;
+    --bg-input:      #ffffff;
 
-    --border:        rgba(255, 255, 255, 0.08);
-    --border-hover:  rgba(255, 255, 255, 0.15);
-    --border-focus:  rgba(99, 142, 255, 0.5);
+    --border:        #e2e8f0;
+    --border-hover:  #cbd5e1;
+    --border-focus:  #94a3b8;
 
-    --text-primary:  #e8ecf4;
-    --text-secondary:#8892a6;
-    --text-muted:    #5a6478;
+    --text-primary:  #0f172a;
+    --text-secondary:#475569;
+    --text-muted:    #94a3b8;
 
     --accent-start:  #2563eb;
     --accent-mid:    #3b82f6;
     --accent-end:    #0ea5e9;
     --success:       #059669;
-    --error:         #ef4444;
+    --warning:       #d97706;
+    --error:         #dc2626;
 
-    --radius:        16px;
-    --radius-sm:     10px;
+    --radius:        12px;
+    --radius-sm:     8px;
     --ease:          cubic-bezier(.4, 0, .2, 1);
     --speed:         .3s;
 
     --font-sans:     'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+
+    color-scheme: light;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────── */
@@ -37,7 +40,7 @@
 
 body {
     font-family: var(--font-sans);
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
     color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
@@ -60,8 +63,8 @@ body {
 .orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.35;
+    filter: blur(100px);
+    opacity: 0.18;
 }
 
 .orb-1 {
@@ -129,8 +132,8 @@ body {
     z-index: 1;
     pointer-events: none;
     background-image:
-        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+        linear-gradient(rgba(0,0,0,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.018) 1px, transparent 1px);
     background-size: 60px 60px;
 }
 
@@ -158,11 +161,10 @@ body {
 /* ── Login card ──────────────────────────────────────────────────── */
 .login-card {
     background: var(--bg-card);
-    backdrop-filter: blur(40px) saturate(1.5);
-    -webkit-backdrop-filter: blur(40px) saturate(1.5);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 48px 40px 40px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
     transition: transform 0.6s var(--ease), opacity 0.6s var(--ease);
 }
 
@@ -188,14 +190,14 @@ body {
     background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
     color: #fff;
     box-shadow:
-        0 0 0 1px rgba(255,255,255,0.1),
-        0 8px 32px rgba(37, 99, 235, 0.35);
+        0 0 0 1px rgba(37, 99, 235, 0.15),
+        0 8px 32px rgba(37, 99, 235, 0.2);
     animation: pulse-ring 3s ease-in-out infinite;
 }
 
 @keyframes pulse-ring {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 8px 32px rgba(37, 99, 235, 0.35); }
-    50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.15), 0 12px 48px rgba(37, 99, 235, 0.5); }
+    0%, 100% { box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15), 0 8px 32px rgba(37, 99, 235, 0.2); }
+    50% { box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2), 0 12px 48px rgba(37, 99, 235, 0.3); }
 }
 
 /* ── Title ───────────────────────────────────────────────────────── */
@@ -204,10 +206,7 @@ body {
     font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.5px;
-    background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--text-primary);
     margin-bottom: 4px;
 }
 
@@ -275,18 +274,11 @@ body {
 
 .form-input:hover {
     border-color: var(--border-hover);
-    background: var(--bg-card-hover);
 }
 
 .form-input:focus {
-    border-color: var(--border-focus);
-    background: var(--bg-card-hover);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-}
-
-.form-input:focus ~ .input-icon,
-.form-input:focus + .input-icon {
-    color: var(--accent-mid);
+    border-color: var(--accent-mid);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .input-wrapper:focus-within .input-icon {
@@ -311,7 +303,7 @@ body {
 
 .toggle-password:hover {
     color: var(--text-secondary);
-    background: rgba(255,255,255,0.06);
+    background: var(--bg-secondary);
 }
 
 /* ── Error message ───────────────────────────────────────────────── */
@@ -320,10 +312,10 @@ body {
     align-items: center;
     gap: 8px;
     padding: 12px 14px;
-    background: rgba(239, 68, 68, 0.08);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    background: #fef2f2;
+    border: 1px solid #fecaca;
     border-radius: var(--radius-sm);
-    color: #fca5a5;
+    color: var(--error);
     font-size: 13px;
     font-weight: 500;
     animation: shake-in 0.3s var(--ease);
@@ -355,7 +347,7 @@ body {
     cursor: pointer;
     overflow: hidden;
     transition: all var(--speed) var(--ease);
-    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.25);
     margin-top: 4px;
 }
 
@@ -363,14 +355,14 @@ body {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+    background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
     transform: translateX(-100%);
     transition: transform 0.6s var(--ease);
 }
 
 .login-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
 }
 
 .login-btn:hover:not(:disabled)::before {
@@ -379,7 +371,7 @@ body {
 
 .login-btn:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
 }
 
 .login-btn:disabled {
@@ -435,10 +427,10 @@ body {
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--accent-mid);
-    background: rgba(37, 99, 235, 0.1);
+    background: rgba(37, 99, 235, 0.06);
     padding: 2px 6px;
     border-radius: 4px;
-    border: 1px solid rgba(37, 99, 235, 0.15);
+    border: 1px solid rgba(37, 99, 235, 0.1);
 }
 
 /* ── Responsive ──────────────────────────────────────────────────── */
