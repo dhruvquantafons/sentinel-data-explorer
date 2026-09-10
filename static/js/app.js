@@ -313,20 +313,18 @@ function showResults(data) {
 
     let html = `
         <div class="result-stat">
-            <span class="stat-icon">🛰️</span>
             <span>${data.product.mission} — ${data.product.label}</span>
         </div>
         <div class="result-stat">
-            <span class="stat-icon">📊</span>
             <span><span class="stat-value">${data.scenes_count}</span> scene(s) found</span>
         </div>
 
         <a class="download-btn" href="/api/download/${encodeURI(data.csv_path)}" download>
-            <span>📥</span><span>Download Scene CSV</span>
+            <span>Download Scene CSV</span>
         </a>
         <button class="csv-preview-btn" id="csv-preview-btn"
                 data-csv="${data.csv_path}">
-            <span>👁️</span><span>Preview CSV</span>
+            <span>Preview CSV</span>
         </button>
     `;
 
@@ -341,7 +339,7 @@ function showResults(data) {
                   })
                 : "N/A";
             const cloud =
-                s.cloud_cover != null ? `<div class="scene-cloud">☁️ ${s.cloud_cover}%</div>` : "";
+                s.cloud_cover != null ? `<div class="scene-cloud">Cloud: ${s.cloud_cover}%</div>` : "";
             const sceneDate = s.datetime ? s.datetime.split("T")[0] : "";
             html += `
                 <div class="scene-item" id="scene-item-${idx}">
@@ -354,7 +352,7 @@ function showResults(data) {
                         <button class="scene-fetch-btn" id="scene-fetch-${idx}"
                                 data-scene-date="${sceneDate}"
                                 data-scene-idx="${idx}">
-                            📥 Fetch
+                            Fetch
                         </button>
                     </div>
                     <div class="scene-actions hidden" id="scene-actions-${idx}">
@@ -392,7 +390,7 @@ async function fetchScene(sceneDate, sceneIdx) {
 
     // Show loading state
     btn.disabled = true;
-    btn.textContent = "⏳ Fetching…";
+    btn.textContent = "Fetching…";
 
     try {
         const res = await fetch("/api/fetch-scene", {
@@ -414,20 +412,20 @@ async function fetchScene(sceneDate, sceneIdx) {
         const ext = result.raster_path.split(".").pop().toUpperCase();
 
         // Replace Fetch button with success indicator
-        btn.textContent = "✅ Fetched";
+        btn.textContent = "Fetched";
         btn.classList.add("scene-fetch-done");
 
         // Show download + preview actions
         actionsEl.classList.remove("hidden");
         actionsEl.innerHTML = `
             <a class="download-btn" href="/api/download/${encodeURI(result.raster_path)}" download>
-                <span>📥</span><span>Download ${ext}</span>
+                <span>Download ${ext}</span>
             </a>
             <button class="preview-btn scene-preview-btn"
                     data-path="${result.raster_path}"
                     data-bbox="${result.bbox.join(",")}"
                     data-pid="${result.product_id}">
-                <span>🗺️</span><span>Preview on Map</span>
+                <span>Preview on Map</span>
             </button>
         `;
 
@@ -453,7 +451,7 @@ async function fetchScene(sceneDate, sceneIdx) {
             bbox: result.bbox,
             productId: result.product_id,
             productLabel: data.product ? data.product.label : "Satellite Product",
-            mission: data.product ? data.product.mission : "Sentinel",
+            mission: data.product ? data.product.mission : "Satellite Product",
         };
 
         const existingIdx = fetchedScenes.findIndex(s => s.sceneDate === sceneDate);
@@ -466,11 +464,11 @@ async function fetchScene(sceneDate, sceneIdx) {
         updateFetchedCompareBar();
 
     } catch (err) {
-        btn.textContent = "❌ Failed";
+        btn.textContent = "Failed";
         btn.disabled = false;
         btn.title = err.message;
         setTimeout(() => {
-            btn.textContent = "📥 Retry";
+            btn.textContent = "Retry";
             btn.classList.remove("scene-fetch-done");
         }, 2000);
     }
@@ -506,7 +504,7 @@ function showError(message) {
     const content = document.getElementById("results-content");
 
     area.classList.remove("hidden");
-    content.innerHTML = `<div class="error-msg">⚠️ ${message}</div>`;
+    content.innerHTML = `<div class="error-msg">${message}</div>`;
 }
 
 // ── CSV Preview Modal ──────────────────────────────────────────────
@@ -550,7 +548,7 @@ async function previewCsv(csvPath) {
 
         body.innerHTML = tableHtml;
     } catch (err) {
-        body.innerHTML = `<div class="csv-empty">⚠️ Failed to load CSV: ${escapeHtml(err.message)}</div>`;
+        body.innerHTML = `<div class="csv-empty">Failed to load CSV: ${escapeHtml(err.message)}</div>`;
     }
 }
 
@@ -657,7 +655,7 @@ async function openCompareModal() {
         });
 
     } catch (err) {
-        runList.innerHTML = `<div class="csv-empty">⚠️ Failed to load runs: ${escapeHtml(err.message)}</div>`;
+        runList.innerHTML = `<div class="csv-empty">Failed to load runs: ${escapeHtml(err.message)}</div>`;
     }
 }
 
@@ -727,7 +725,7 @@ async function executeComparison() {
             const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
             // Build a short label for the source
             const parts = run.id.split("_");
-            const label = parts.slice(0, 2).join(" ").replace(/Sentinel(\d)/, "S-$1");
+            const label = parts.slice(0, 2).join(" ");
 
             dataRows.forEach(row => {
                 const rowObj = {};
@@ -802,7 +800,7 @@ async function executeComparison() {
         tableArea.innerHTML = html;
 
     } catch (err) {
-        tableArea.innerHTML = `<div class="csv-empty">⚠️ Comparison failed: ${escapeHtml(err.message)}</div>`;
+        tableArea.innerHTML = `<div class="csv-empty">Comparison failed: ${escapeHtml(err.message)}</div>`;
     }
 }
 
@@ -830,7 +828,7 @@ function updateFetchedCompareBar() {
     }
 
     bar.innerHTML = `
-        <span class="compare-fetched-bar-text">⚖️ ${fetchedScenes.length} fetched scenes ready to compare</span>
+        <span class="compare-fetched-bar-text">${fetchedScenes.length} fetched scenes ready to compare</span>
         <button id="trigger-fetched-compare-btn" class="compare-fetched-bar-btn">
             <span>Compare Scenes (${fetchedScenes.length})</span>
         </button>
@@ -1105,7 +1103,7 @@ function renderFetchedDataTable(sortedScenes) {
     let rowDownload = sortedScenes.map(s => `
         <td>
             <a class="download-btn" href="/api/download/${encodeURI(s.rasterPath)}" download>
-                📥 Download
+                Download
             </a>
         </td>
     `).join("");

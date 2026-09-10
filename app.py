@@ -285,8 +285,14 @@ async def list_runs():
         west, south, east, north = float(m.group(3)), float(m.group(4)), float(m.group(5)), float(m.group(6))
         ts_str = m.group(7) + m.group(8)
 
-        # Pretty-format mission (Sentinel2 -> Sentinel-2)
-        mission = re.sub(r'(Sentinel)(\d)', r'\1-\2', mission_raw)
+        # Pretty-format mission category
+        mission_map = {
+            "Sentinel1": "Radar (SAR)",
+            "Sentinel2": "Optical Imagery",
+            "Sentinel3": "Ocean & Land Color",
+            "Sentinel5P": "Atmospheric Air Quality",
+        }
+        mission = mission_map.get(mission_raw, mission_raw.replace("Sentinel", "Satellite "))
         product_label = product_raw.replace("_", " ")
 
         try:

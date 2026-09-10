@@ -164,56 +164,56 @@ function evaluatePixel(s) {{
 # Product catalog, grouped by mission for the menu
 # ---------------------------------------------------------------------
 PRODUCTS = {
-    # --- Sentinel-2 ---
-    "1": {"mission": "Sentinel-2", "label": "True Color (visual photo)",
+    # --- Optical Imagery ---
+    "1": {"mission": "Optical Imagery", "label": "True Color (visual photo)",
           "collection": "sentinel-2-l2a", "evalscript": S2_TRUECOLOR,
           "format": "image/png", "extension": "png", "has_cloud_filter": True},
-    "2": {"mission": "Sentinel-2", "label": "NDVI (vegetation health)",
+    "2": {"mission": "Optical Imagery", "label": "NDVI (vegetation health)",
           "collection": "sentinel-2-l2a", "evalscript": S2_NDVI,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": True},
-    "3": {"mission": "Sentinel-2", "label": "NDWI (water content)",
+    "3": {"mission": "Optical Imagery", "label": "NDWI (water content)",
           "collection": "sentinel-2-l2a", "evalscript": S2_NDWI,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": True},
-    "4": {"mission": "Sentinel-2", "label": "NDBI (built-up / urban areas)",
+    "4": {"mission": "Optical Imagery", "label": "NDBI (built-up / urban areas)",
           "collection": "sentinel-2-l2a", "evalscript": S2_NDBI,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": True},
-    "5": {"mission": "Sentinel-2", "label": "NDSI (snow cover)",
+    "5": {"mission": "Optical Imagery", "label": "NDSI (snow cover)",
           "collection": "sentinel-2-l2a", "evalscript": S2_NDSI,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": True},
-    "6": {"mission": "Sentinel-2", "label": "EVI (enhanced vegetation index)",
+    "6": {"mission": "Optical Imagery", "label": "EVI (enhanced vegetation index)",
           "collection": "sentinel-2-l2a", "evalscript": S2_EVI,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": True},
 
-    # --- Sentinel-1 ---
-    "7": {"mission": "Sentinel-1", "label": "Radar Backscatter VV/VH (works through clouds/night)",
+    # --- Radar (SAR) ---
+    "7": {"mission": "Radar (SAR)", "label": "Radar Backscatter VV/VH (works through clouds/night)",
           "collection": "sentinel-1-grd", "evalscript": S1_RADAR,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
 
-    # --- Sentinel-3 ---
-    "8": {"mission": "Sentinel-3", "label": "OLCI True Color (ocean/land)",
+    # --- Ocean & Land Color ---
+    "8": {"mission": "Ocean & Land Color", "label": "OLCI True Color (ocean/land)",
           "collection": "sentinel-3-olci", "evalscript": S3_OLCI_TRUECOLOR,
           "format": "image/png", "extension": "png", "has_cloud_filter": False},
-    "9": {"mission": "Sentinel-3", "label": "SLSTR Brightness Temp S8/S9 (thermal infrared)",
+    "9": {"mission": "Ocean & Land Color", "label": "SLSTR Brightness Temp S8/S9 (thermal infrared)",
           "collection": "sentinel-3-slstr", "evalscript": S3_SLSTR_BT,
           "format": "image/tiff", "extension": "tiff", "has_cloud_filter": True},
 
-    # --- Sentinel-5P (air quality / atmosphere) ---
-    "10": {"mission": "Sentinel-5P", "label": "NO2 (nitrogen dioxide)",
+    # --- Atmospheric Air Quality ---
+    "10": {"mission": "Atmospheric Air Quality", "label": "NO2 (nitrogen dioxide)",
            "collection": "sentinel-5p-l2", "evalscript": s5p_evalscript("NO2"),
            "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
-    "11": {"mission": "Sentinel-5P", "label": "CH4 (methane)",
+    "11": {"mission": "Atmospheric Air Quality", "label": "CH4 (methane)",
            "collection": "sentinel-5p-l2", "evalscript": s5p_evalscript("CH4"),
            "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
-    "12": {"mission": "Sentinel-5P", "label": "CO (carbon monoxide)",
+    "12": {"mission": "Atmospheric Air Quality", "label": "CO (carbon monoxide)",
            "collection": "sentinel-5p-l2", "evalscript": s5p_evalscript("CO"),
            "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
-    "13": {"mission": "Sentinel-5P", "label": "O3 (ozone)",
+    "13": {"mission": "Atmospheric Air Quality", "label": "O3 (ozone)",
            "collection": "sentinel-5p-l2", "evalscript": s5p_evalscript("O3"),
            "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
-    "14": {"mission": "Sentinel-5P", "label": "SO2 (sulfur dioxide)",
+    "14": {"mission": "Atmospheric Air Quality", "label": "SO2 (sulfur dioxide)",
            "collection": "sentinel-5p-l2", "evalscript": s5p_evalscript("SO2"),
            "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
-    "15": {"mission": "Sentinel-5P", "label": "AER_AI (aerosol index)",
+    "15": {"mission": "Atmospheric Air Quality", "label": "AER_AI (aerosol index)",
            "collection": "sentinel-5p-l2", "evalscript": s5p_evalscript("AER_AI_340_380"),
            "format": "image/tiff", "extension": "tiff", "has_cloud_filter": False},
 }
@@ -408,8 +408,8 @@ def save_scenes_csv(scenes: list, csv_path: str) -> None:
     and expands all STAC properties into individual columns instead of raw JSON blobs.
     """
     primary_fields = [
-        "scene_id", "datetime", "platform", "constellation", "instruments",
-        "collection", "cloud_cover_percent", "gsd_m", "orbit_state",
+        "scene_id", "datetime", "instruments",
+        "cloud_cover_percent", "gsd_m", "orbit_state",
         "absolute_orbit", "relative_orbit", "epsg_code", "sar_polarizations",
         "sar_mode", "s5p_product_type", "s5p_timeliness",
     ]
@@ -421,7 +421,7 @@ def save_scenes_csv(scenes: list, csv_path: str) -> None:
 
     # Handled keys to exclude from generic property expansion
     handled_prop_keys = {
-        "datetime", "platform", "constellation", "instruments", "eo:cloud_cover",
+        "datetime", "platform", "constellation", "collection", "instruments", "eo:cloud_cover",
         "gsd", "sat:orbit_state", "sat:absolute_orbit", "sat:relative_orbit",
         "proj:epsg", "sar:polarizations", "sar:instrument_mode", "s5p:type",
         "s5p:timeliness",
@@ -446,11 +446,7 @@ def save_scenes_csv(scenes: list, csv_path: str) -> None:
         row = {
             "scene_id": scene.get("id", ""),
             "datetime": props.get("datetime", ""),
-            "platform": props.get("platform", ""),
-            "constellation": props.get("constellation", ""),
             "instruments": format_cell_value(props.get("instruments")),
-            "collection": ", ".join(scene.get("collection", []))
-            if isinstance(scene.get("collection"), list) else scene.get("collection", ""),
             "cloud_cover_percent": props.get("eo:cloud_cover", "") if props.get("eo:cloud_cover") is not None else "",
             "gsd_m": props.get("gsd", ""),
             "orbit_state": props.get("sat:orbit_state", ""),

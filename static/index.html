@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TeraVerify — Satellite Verification Platform</title>
-    <meta name="description" content="TeraVerify — Interactive satellite data verification platform for Sentinel-1, 2, 3, and 5P missions. Draw an area on the map and fetch NDVI, NDWI, True Color, SAR, and atmospheric data.">
-
-    <!-- Fonts -->
+    <meta name="description" content="TeraVerify — Interactive satellite data verification platform for optical, radar, marine, and atmospheric products. Draw an area on the map and fetch NDVI, NDWI, True Color, SAR, and atmospheric data.">
+<!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -25,10 +24,16 @@
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <span class="logo-icon">🔬</span>
+                    <div class="logo-icon">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="2" y="2" width="28" height="28" rx="6" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="16" cy="16" r="6" stroke="currentColor" stroke-width="2"/>
+                            <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
                     <div>
                         <h1>TeraVerify</h1>
-                        <p class="tagline">Satellite Verification Platform</p>
+                        <p class="tagline">Satellite Verification</p>
                     </div>
                 </div>
             </div>
@@ -37,10 +42,7 @@
 
                 <!-- Mission & Product -->
                 <div class="form-section">
-                    <label class="form-label" for="product-select">
-                        <span class="label-icon">📡</span>
-                        Mission &amp; Product
-                    </label>
+                    <label class="form-label" for="product-select">Mission &amp; Product</label>
                     <select id="product-select" class="form-select">
                         <option value="" disabled selected>Loading products…</option>
                     </select>
@@ -48,10 +50,7 @@
 
                 <!-- Date Range -->
                 <div class="form-section">
-                    <label class="form-label">
-                        <span class="label-icon">📅</span>
-                        Date Range
-                    </label>
+                    <label class="form-label">Date Range</label>
                     <div class="date-inputs">
                         <div class="date-field">
                             <span class="date-label">From</span>
@@ -66,10 +65,7 @@
 
                 <!-- AOI Bounding Box -->
                 <div class="form-section">
-                    <label class="form-label">
-                        <span class="label-icon">📍</span>
-                        AOI Bounding Box
-                    </label>
+                    <label class="form-label">AOI Bounding Box</label>
                     <div id="bbox-display" class="bbox-display">
                         <p class="bbox-hint">Draw a rectangle on the map to define your Area of Interest</p>
                     </div>
@@ -77,7 +73,6 @@
 
                 <!-- Fetch button -->
                 <button id="fetch-btn" class="fetch-btn" disabled>
-                    <span class="btn-icon">🚀</span>
                     <span class="btn-text">Fetch Satellite Data</span>
                 </button>
 
@@ -85,28 +80,24 @@
                 <div id="status-area" class="status-area hidden">
                     <div class="loader">
                         <div class="loader-ring"></div>
-                        <span class="loader-text">Contacting Sentinel Hub…</span>
+                        <span class="loader-text">Contacting satellite data service…</span>
                     </div>
                 </div>
 
                 <!-- Results -->
                 <div id="results-area" class="results-area hidden">
-                    <div class="results-header">
-                        <span class="label-icon">📊</span>
-                        <span>Results</span>
-                    </div>
+                    <div class="results-header">Results</div>
                     <div id="results-content" class="results-content"></div>
                 </div>
 
                 <!-- Compare button -->
                 <button id="compare-btn" class="compare-btn">
-                    <span class="btn-icon">⚖️</span>
                     <span class="btn-text">Compare Datasets</span>
                 </button>
             </div>
 
             <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
-                <span>◀</span>
+                <span>&lsaquo;</span>
             </button>
         </aside>
 
@@ -118,23 +109,19 @@
     <div id="compare-modal" class="compare-modal-overlay hidden">
         <div class="compare-modal">
             <div class="compare-modal-header">
-                <div class="csv-modal-title">
-                    <span>⚖️</span>
-                    <span>Temporal Data Comparison</span>
-                </div>
+                <div class="csv-modal-title">Temporal Data Comparison</div>
                 <button id="compare-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
             </div>
             <div class="compare-modal-content">
                 <!-- Left: Run selector -->
                 <div class="compare-selector">
                     <div class="compare-selector-header">
-                        <span class="form-label" style="margin-bottom:0">📂 Select Runs</span>
+                        <span class="form-label" style="margin-bottom:0">Select Runs</span>
                     </div>
                     <div id="compare-run-list" class="compare-run-list">
                         <div class="csv-empty">Loading runs…</div>
                     </div>
                     <button id="compare-execute-btn" class="fetch-btn compare-execute-btn" disabled>
-                        <span class="btn-icon">📊</span>
                         <span class="btn-text">Compare Selected</span>
                     </button>
                 </div>
@@ -150,10 +137,7 @@
     <div id="csv-modal" class="csv-modal-overlay hidden">
         <div class="csv-modal">
             <div class="csv-modal-header">
-                <div class="csv-modal-title">
-                    <span>📋</span>
-                    <span>Scene Metadata Preview</span>
-                </div>
+                <div class="csv-modal-title">Scene Metadata Preview</div>
                 <button id="csv-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
             </div>
             <div id="csv-modal-body" class="csv-modal-body">
@@ -167,7 +151,6 @@
         <div class="fetched-compare-modal">
             <div class="fetched-compare-modal-header">
                 <div class="fetched-compare-title">
-                    <span>⚖️</span>
                     <div>
                         <div class="modal-heading">Raster &amp; Temporal Dataset Comparison</div>
                         <div id="fetched-compare-subtitle" class="modal-subheading">Comparing selected scenes</div>
@@ -176,16 +159,16 @@
                 
                 <div class="fetched-compare-tabs">
                     <button id="tab-side-by-side" class="tab-btn active">
-                        <span>🗺️</span> Side-by-Side
+                        Side-by-Side
                     </button>
                     <button id="tab-split-slider" class="tab-btn">
-                        <span>🪟</span> Split Slider
+                        Split Slider
                     </button>
                     <button id="tab-multi-grid" class="tab-btn">
-                        <span>🔲</span> Multi-Grid
+                        Multi-Grid
                     </button>
                     <button id="tab-data-table" class="tab-btn">
-                        <span>📊</span> Data Matrix
+                        Data Matrix
                     </button>
                 </div>
 
@@ -218,19 +201,19 @@
                     <div class="split-map-container">
                         <div class="map-panel-header split-header">
                             <div class="split-badge-item">
-                                <span class="badge badge-left">◀ Left</span>
+                                <span class="badge badge-left">Left</span>
                                 <select id="split-select-left" class="compare-scene-select" aria-label="Select left split scene"></select>
                             </div>
                             <div class="split-hint">Drag slider horizontally to compare</div>
                             <div class="split-badge-item">
-                                <span class="badge badge-right">Right ▶</span>
+                                <span class="badge badge-right">Right</span>
                                 <select id="split-select-right" class="compare-scene-select" aria-label="Select right split scene"></select>
                             </div>
                         </div>
                         <div id="map-compare-split" class="compare-map split-map-wrapper">
                             <input type="range" id="split-slider" min="0" max="100" value="50" class="split-slider-input" aria-label="Swipe comparison slider">
                             <div id="split-slider-line" class="split-slider-line">
-                                <div class="split-slider-handle">↔</div>
+                                <div class="split-slider-handle"></div>
                             </div>
                         </div>
                     </div>
