@@ -8,6 +8,7 @@ let map;
 let drawnItems;
 let currentBbox   = null;
 let currentOverlay = null;
+let currentOverlayUrl = null;     // object URL backing currentOverlay
 let products      = {};
 let compareSelectedRuns = [];
 
@@ -18,11 +19,34 @@ let gridMaps = [];
 let leftOverlay = null, rightOverlay = null, splitOverlayLeft = null, splitOverlayRight = null;
 let isSyncingMaps = false;
 
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const DEFAULT_OPACITY = 0.85;
+
+// Style for the drawn AOI rectangle. Its fill is dropped while a raster
+// preview is shown, otherwise the translucent blue tints the raster colours.
+const AOI_STYLE = {
+    color: "#2563eb",
+    weight: 2,
+    fillOpacity: 0.08,
+    fillColor: "#3b82f6",
+    dashArray: "6 4",
+};
+
 // Color palette for comparison source badges
 const COMPARE_COLORS = [
     "#818cf8", "#06b6d4", "#10b981", "#f59e0b",
     "#ef4444", "#ec4899", "#8b5cf6", "#14b8a6",
 ];
+
+const ICONS = {
+    download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    table:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>',
+    map:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
+    check:    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+    alert:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    cloud:    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+    compare:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>',
+};
 
 // ── Bootstrap ────────────────────────────────────────────────────
 
@@ -31,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
     loadProducts();
     initDateDefaults();
     initEventListeners();
+    refreshFetchBtn();
 });
 
 // ── Map setup ────────────────────────────────────────────────────
@@ -43,14 +68,11 @@ function initMap() {
     });
 
     // OpenStreetMap tiles (free, no API key)
-    L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-            attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19,
-        },
-    ).addTo(map);
+    L.tileLayer(TILE_URL, {
+        attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+    }).addTo(map);
 
     // Feature group that holds drawn rectangles
     drawnItems = new L.FeatureGroup();
@@ -59,15 +81,7 @@ function initMap() {
     // Leaflet.draw: only rectangle
     const drawControl = new L.Control.Draw({
         draw: {
-            rectangle: {
-                shapeOptions: {
-                    color: "#818cf8",
-                    weight: 2,
-                    fillOpacity: 0.12,
-                    fillColor: "#6366f1",
-                    dashArray: "6 4",
-                },
-            },
+            rectangle: { shapeOptions: AOI_STYLE },
             polygon: false,
             circle: false,
             circlemarker: false,
@@ -86,44 +100,51 @@ function initMap() {
     map.on(L.Draw.Event.CREATED, (e) => {
         // Clear old rectangle & overlay
         drawnItems.clearLayers();
-        if (currentOverlay) {
-            map.removeLayer(currentOverlay);
-            currentOverlay = null;
-        }
+        clearPreview();
 
+        e.layer.setStyle(AOI_STYLE);
         drawnItems.addLayer(e.layer);
-
-        const b = e.layer.getBounds();
-        currentBbox = [
-            +b.getWest().toFixed(4),
-            +b.getSouth().toFixed(4),
-            +b.getEast().toFixed(4),
-            +b.getNorth().toFixed(4),
-        ];
-
-        renderBbox(currentBbox);
-        refreshFetchBtn();
+        setBboxFromLayer(e.layer);
     });
 
     map.on(L.Draw.Event.DELETED, () => {
         currentBbox = null;
+        clearPreview();
         renderBbox(null);
         refreshFetchBtn();
     });
 
     map.on(L.Draw.Event.EDITED, () => {
         const layers = drawnItems.getLayers();
-        if (layers.length) {
-            const b = layers[0].getBounds();
-            currentBbox = [
-                +b.getWest().toFixed(4),
-                +b.getSouth().toFixed(4),
-                +b.getEast().toFixed(4),
-                +b.getNorth().toFixed(4),
-            ];
-            renderBbox(currentBbox);
-        }
+        if (layers.length) setBboxFromLayer(layers[0]);
     });
+}
+
+function setBboxFromLayer(layer) {
+    const b = layer.getBounds();
+    currentBbox = [
+        +b.getWest().toFixed(4),
+        +b.getSouth().toFixed(4),
+        +b.getEast().toFixed(4),
+        +b.getNorth().toFixed(4),
+    ];
+    renderBbox(currentBbox);
+    refreshFetchBtn();
+}
+
+function bboxBounds(bbox) {
+    return [
+        [bbox[1], bbox[0]],  // [south, west]
+        [bbox[3], bbox[2]],  // [north, east]
+    ];
+}
+
+/** Approximate area of a lon/lat bbox in km² (equirectangular). */
+function bboxAreaKm2(bbox) {
+    const midLat = ((bbox[1] + bbox[3]) / 2) * Math.PI / 180;
+    const w = (bbox[2] - bbox[0]) * 111.32 * Math.cos(midLat);
+    const h = (bbox[3] - bbox[1]) * 110.57;
+    return Math.abs(w * h);
 }
 
 // ── Bbox display ─────────────────────────────────────────────────
@@ -132,10 +153,20 @@ function renderBbox(bbox) {
     const el = document.getElementById("bbox-display");
     if (!bbox) {
         el.classList.remove("active");
-        el.innerHTML =
-            '<p class="bbox-hint">Draw a rectangle on the map to define your Area of Interest</p>';
+        el.innerHTML = `
+            <p class="bbox-hint">
+                Use the
+                <span class="inline-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(37,99,235,0.15)" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="4 3"/></svg></span>
+                rectangle tool on the map to draw your area
+            </p>`;
         return;
     }
+
+    const area = bboxAreaKm2(bbox);
+    const areaStr = area >= 1000
+        ? `${Math.round(area).toLocaleString()} km²`
+        : `${area.toFixed(1)} km²`;
+
     el.classList.add("active");
     el.innerHTML = `
         <div class="bbox-grid">
@@ -143,16 +174,25 @@ function renderBbox(bbox) {
             <div class="bbox-item"><span class="bbox-key">East</span><span class="bbox-val">${bbox[2]}°</span></div>
             <div class="bbox-item"><span class="bbox-key">South</span><span class="bbox-val">${bbox[1]}°</span></div>
             <div class="bbox-item"><span class="bbox-key">North</span><span class="bbox-val">${bbox[3]}°</span></div>
+        </div>
+        <div class="bbox-meta">
+            <span>≈ ${areaStr}</span>
+            <button type="button" class="link-btn" id="bbox-zoom">Zoom to area</button>
         </div>`;
+
+    document.getElementById("bbox-zoom").addEventListener("click", () => {
+        map.fitBounds(bboxBounds(bbox), { padding: [60, 60] });
+    });
 }
 
 // ── Product dropdown ─────────────────────────────────────────────
 
 async function loadProducts() {
+    const sel = document.getElementById("product-select");
     try {
         const res  = await fetch("/api/products");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         products   = await res.json();
-        const sel  = document.getElementById("product-select");
 
         sel.innerHTML = '<option value="" disabled selected>Select a product…</option>';
 
@@ -175,24 +215,61 @@ async function loadProducts() {
         }
     } catch (err) {
         console.error("Failed to load products:", err);
-        document.getElementById("product-select").innerHTML =
-            '<option value="" disabled selected>⚠ Could not load products</option>';
+        sel.innerHTML = '<option value="" disabled selected>Could not load products</option>';
+        showToast("Could not load products", "Reload the page to try again.", "error");
     }
 }
 
-// ── Date defaults (last 30 days) ─────────────────────────────────
+// ── Dates ────────────────────────────────────────────────────────
 
 function initDateDefaults() {
+    const today = fmt(new Date());
+    document.getElementById("date-from").max = today;
+    document.getElementById("date-to").max   = today;
+    applyDatePreset(30);
+}
+
+function applyDatePreset(days) {
     const today = new Date();
     const ago   = new Date(today);
-    ago.setDate(today.getDate() - 30);
+    ago.setDate(today.getDate() - days);
 
     document.getElementById("date-to").value   = fmt(today);
     document.getElementById("date-from").value = fmt(ago);
+    syncPresetChips();
+    refreshFetchBtn();
+}
+
+/** Highlight the preset chip matching the current range, if any. */
+function syncPresetChips() {
+    const from = document.getElementById("date-from").value;
+    const to   = document.getElementById("date-to").value;
+    const days = from && to ? Math.round((new Date(to) - new Date(from)) / 864e5) : null;
+    const isToday = to === fmt(new Date());
+
+    document.querySelectorAll(".date-presets .chip").forEach(chip => {
+        chip.classList.toggle("active", isToday && +chip.dataset.days === days);
+    });
+}
+
+/** Returns an error message for the date range, or "" when it is valid. */
+function dateRangeError() {
+    const from = document.getElementById("date-from").value;
+    const to   = document.getElementById("date-to").value;
+    const today = fmt(new Date());
+
+    if (!from || !to) return "Choose both a start and an end date.";
+    if (from > to)    return "The start date must be before the end date.";
+    if (to > today)   return "The end date can't be in the future.";
+    return "";
 }
 
 function fmt(d) {
-    return d.toISOString().split("T")[0];
+    // Local calendar date (toISOString would shift it to UTC)
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
 }
 
 // ── Event wiring ─────────────────────────────────────────────────
@@ -201,6 +278,25 @@ function initEventListeners() {
     document.getElementById("product-select").addEventListener("change", refreshFetchBtn);
     document.getElementById("fetch-btn").addEventListener("click", fetchData);
     document.getElementById("sidebar-toggle").addEventListener("click", toggleSidebar);
+
+    ["date-from", "date-to"].forEach(id => {
+        document.getElementById(id).addEventListener("change", () => {
+            syncPresetChips();
+            refreshFetchBtn();
+        });
+    });
+
+    document.querySelectorAll(".date-presets .chip").forEach(chip => {
+        chip.addEventListener("click", () => applyDatePreset(+chip.dataset.days));
+    });
+
+    // Map preview legend
+    document.getElementById("legend-close").addEventListener("click", clearPreview);
+    document.getElementById("legend-opacity").addEventListener("input", (e) => {
+        const v = +e.target.value;
+        document.getElementById("legend-opacity-val").textContent = `${v}%`;
+        if (currentOverlay) currentOverlay.setOpacity(v / 100);
+    });
 
     // CSV modal close handlers
     document.getElementById("csv-modal-close").addEventListener("click", closeCsvModal);
@@ -232,24 +328,65 @@ function initEventListeners() {
     document.getElementById("split-select-left").addEventListener("change", onSplitDropdownChange);
     document.getElementById("split-select-right").addEventListener("change", onSplitDropdownChange);
 
-    // Escape closes any open modal
+    // Escape closes the top-most open modal (the CSV modal can sit above the others)
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
+        if (e.key !== "Escape") return;
+        if (!document.getElementById("csv-modal").classList.contains("hidden")) {
             closeCsvModal();
+        } else {
             closeCompareModal();
             closeFetchedCompareModal();
         }
     });
 }
 
+/**
+ * Enable the search button only when every step is complete, mark finished
+ * steps, and tell the user what is still missing.
+ */
 function refreshFetchBtn() {
-    const selected = document.getElementById("product-select").value;
-    document.getElementById("fetch-btn").disabled = !(currentBbox && selected);
+    const productId = document.getElementById("product-select").value;
+    const dateErr   = dateRangeError();
+    const btn       = document.getElementById("fetch-btn");
+    const hint      = document.getElementById("fetch-hint");
+    const dateErrEl = document.getElementById("date-error");
+
+    document.querySelector('[data-step="product"]').classList.toggle("done", !!productId);
+    document.querySelector('[data-step="dates"]').classList.toggle("done", !dateErr);
+    document.querySelector('[data-step="aoi"]').classList.toggle("done", !!currentBbox);
+    document.querySelector(".map-wrap").classList.toggle("needs-aoi", !currentBbox);
+
+    dateErrEl.textContent = dateErr;
+    dateErrEl.classList.toggle("hidden", !dateErr);
+    ["date-from", "date-to"].forEach(id =>
+        document.getElementById(id).classList.toggle("invalid", !!dateErr));
+
+    const missing = [];
+    if (!productId)   missing.push("pick a product");
+    if (!currentBbox) missing.push("draw an area on the map");
+
+    if (btn.classList.contains("loading")) return;
+    btn.disabled = missing.length > 0 || !!dateErr;
+
+    if (missing.length) {
+        const text = missing.join(" and ");
+        hint.textContent = text.charAt(0).toUpperCase() + text.slice(1) + " to continue";
+        hint.classList.remove("hidden");
+    } else {
+        hint.classList.add("hidden");
+    }
 }
 
 function toggleSidebar() {
     document.getElementById("sidebar").classList.toggle("collapsed");
-    setTimeout(() => map.invalidateSize(), 350);
+    setTimeout(() => map.invalidateSize(), 320);
+}
+
+function setButtonLoading(btn, isLoading, label) {
+    btn.classList.toggle("loading", isLoading);
+    btn.disabled = isLoading;
+    btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+    if (label) btn.querySelector(".btn-text").textContent = label;
 }
 
 // ── Fetch satellite data ─────────────────────────────────────────
@@ -259,18 +396,17 @@ async function fetchData() {
     const dateFrom  = document.getElementById("date-from").value;
     const dateTo    = document.getElementById("date-to").value;
 
-    if (!currentBbox || !productId || !dateFrom || !dateTo) return;
+    if (!currentBbox || !productId || dateRangeError()) return;
 
     // Reset current session fetched scenes
     fetchedScenes = [];
-    updateFetchedCompareBar();
+    clearPreview();
 
     const btn       = document.getElementById("fetch-btn");
     const statusEl  = document.getElementById("status-area");
     const resultsEl = document.getElementById("results-area");
 
-    btn.disabled = true;
-    btn.querySelector(".btn-text").textContent = "Processing…";
+    setButtonLoading(btn, true, "Searching catalog…");
     statusEl.classList.remove("hidden");
     resultsEl.classList.add("hidden");
 
@@ -295,13 +431,24 @@ async function fetchData() {
     } catch (err) {
         showError(err.message);
     } finally {
-        btn.disabled = false;
-        btn.querySelector(".btn-text").textContent = "Fetch Satellite Data";
+        setButtonLoading(btn, false, "Search Scenes");
         statusEl.classList.add("hidden");
+        refreshFetchBtn();
     }
 }
 
 // ── Display results ──────────────────────────────────────────────
+
+const SCENE_DATE_FMT = {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+};
+
+function cloudPill(cover) {
+    if (cover == null) return "";
+    const level = cover < 20 ? "low" : cover < 60 ? "mid" : "high";
+    return `<span class="cloud-pill ${level}" title="Cloud cover">${ICONS.cloud}${(+cover).toFixed(0)}% cloud</span>`;
+}
 
 function showResults(data) {
     const area    = document.getElementById("results-area");
@@ -311,48 +458,52 @@ function showResults(data) {
     area._data = data;
     area.classList.remove("hidden");
 
-    let html = `
-        <div class="result-stat">
-            <span>${data.product.mission} — ${data.product.label}</span>
-        </div>
-        <div class="result-stat">
-            <span><span class="stat-value">${data.scenes_count}</span> scene(s) found</span>
-        </div>
+    const shown = data.scenes?.length || 0;
+    const countText = data.scenes_count > shown
+        ? `<strong>${data.scenes_count}</strong> scenes found · showing the ${shown} most recent`
+        : `<strong>${data.scenes_count}</strong> scene${data.scenes_count === 1 ? "" : "s"} found`;
 
-        <a class="download-btn" href="/api/download/${encodeURI(data.csv_path)}" download>
-            <span>Download Scene CSV</span>
-        </a>
-        <button class="csv-preview-btn" id="csv-preview-btn"
-                data-csv="${data.csv_path}">
-            <span>Preview CSV</span>
-        </button>
+    let html = `
+        <div class="summary-card">
+            <div class="summary-product">${escapeHtml(data.product.mission)}</div>
+            <div class="summary-label">${escapeHtml(data.product.label)}</div>
+            <div class="summary-count">${countText}</div>
+            <div class="summary-actions">
+                <a class="download-btn" href="/api/download/${encodeURI(data.csv_path)}" download>
+                    ${ICONS.download}<span>Scene CSV</span>
+                </a>
+                <button class="csv-preview-btn" id="csv-preview-btn" data-csv="${escapeHtml(data.csv_path)}">
+                    ${ICONS.table}<span>View table</span>
+                </button>
+            </div>
+        </div>
     `;
 
     // Scene list with Fetch buttons
-    if (data.scenes?.length) {
+    if (shown) {
+        html += `<div class="scene-list-header"><span>Scenes</span></div>`;
         html += '<div class="scene-list">';
         data.scenes.forEach((s, idx) => {
             const dateStr = s.datetime
-                ? new Date(s.datetime).toLocaleDateString("en-US", {
-                      year: "numeric", month: "short", day: "numeric",
-                      hour: "2-digit", minute: "2-digit",
-                  })
+                ? new Date(s.datetime).toLocaleDateString("en-US", SCENE_DATE_FMT)
                 : "N/A";
-            const cloud =
-                s.cloud_cover != null ? `<div class="scene-cloud">Cloud: ${s.cloud_cover}%</div>` : "";
             const sceneDate = s.datetime ? s.datetime.split("T")[0] : "";
             html += `
                 <div class="scene-item" id="scene-item-${idx}">
                     <div class="scene-info-row">
                         <div>
                             <div class="scene-date">${dateStr}</div>
-                            <div class="scene-id" title="${s.id}">${s.id}</div>
-                            ${cloud}
+                            <div class="scene-meta">
+                                ${cloudPill(s.cloud_cover)}
+                                ${s.platform ? `<span class="scene-platform">${escapeHtml(scrubSentinel(s.platform))}</span>` : ""}
+                            </div>
+                            <div class="scene-id" title="${escapeHtml(scrubSentinel(s.id))}">${escapeHtml(scrubSentinel(s.id))}</div>
                         </div>
                         <button class="scene-fetch-btn" id="scene-fetch-${idx}"
                                 data-scene-date="${sceneDate}"
                                 data-scene-idx="${idx}">
-                            Fetch
+                            <span class="btn-spinner hidden" aria-hidden="true"></span>
+                            <span class="btn-text">Fetch</span>
                         </button>
                     </div>
                     <div class="scene-actions hidden" id="scene-actions-${idx}">
@@ -386,11 +537,10 @@ async function fetchScene(sceneDate, sceneIdx) {
     const actionsEl = document.getElementById(`scene-actions-${sceneIdx}`);
     const itemEl = document.getElementById(`scene-item-${sceneIdx}`);
 
-    if (!sceneDate || !data) return;
+    if (!sceneDate || !data || btn.classList.contains("scene-fetch-done")) return;
 
-    // Show loading state
-    btn.disabled = true;
-    btn.textContent = "Fetching…";
+    btn.classList.remove("scene-fetch-failed");
+    setButtonLoading(btn, true, "Fetching");
 
     try {
         const res = await fetch("/api/fetch-scene", {
@@ -410,32 +560,31 @@ async function fetchScene(sceneDate, sceneIdx) {
 
         const result = await res.json();
         const ext = result.raster_path.split(".").pop().toUpperCase();
+        const dateLabel = itemEl.querySelector(".scene-date").textContent;
 
-        // Replace Fetch button with success indicator
-        btn.textContent = "Fetched";
+        setButtonLoading(btn, false);
+        btn.disabled = true;
         btn.classList.add("scene-fetch-done");
+        btn.querySelector(".btn-text").innerHTML = `${ICONS.check} Fetched`;
 
-        // Show download + preview actions
+        // Show preview + download actions
         actionsEl.classList.remove("hidden");
         actionsEl.innerHTML = `
-            <a class="download-btn" href="/api/download/${encodeURI(result.raster_path)}?product_id=${result.product_id}" download>
-                <span>Download ${ext}</span>
-            </a>
-            <button class="preview-btn scene-preview-btn"
-                    data-path="${result.raster_path}"
-                    data-bbox="${result.bbox.join(",")}"
-                    data-pid="${result.product_id}">
-                <span>Preview on Map</span>
+            <button class="preview-btn scene-preview-btn">
+                ${ICONS.map}<span>Show on map</span>
             </button>
+            <a class="download-btn" href="/api/download/${encodeURI(result.raster_path)}?product_id=${result.product_id}" download>
+                ${ICONS.download}<span>${ext}</span>
+            </a>
         `;
 
-        // Wire up preview button
-        actionsEl.querySelector(".scene-preview-btn").addEventListener("click", function () {
-            const bbox = this.dataset.bbox.split(",").map(Number);
-            showPreview(this.dataset.path, bbox, this.dataset.pid);
+        const showOnMap = () => showPreview(result.raster_path, result.bbox, result.product_id, {
+            title: data.product.label,
+            subtitle: dateLabel,
+            sceneIdx,
         });
+        actionsEl.querySelector(".scene-preview-btn").addEventListener("click", showOnMap);
 
-        // Highlight the fetched scene
         itemEl.classList.add("scene-fetched");
 
         // Save fetched scene info to state for dataset comparison
@@ -445,8 +594,8 @@ async function fetchScene(sceneDate, sceneIdx) {
             sceneDate,
             datetime: sceneMeta.datetime || sceneDate,
             cloudCover: sceneMeta.cloud_cover,
-            sceneId: sceneMeta.id || "N/A",
-            platform: sceneMeta.platform || "N/A",
+            sceneId: scrubSentinel(sceneMeta.id) || "N/A",
+            platform: scrubSentinel(sceneMeta.platform) || "N/A",
             rasterPath: result.raster_path,
             bbox: result.bbox,
             productId: result.product_id,
@@ -463,48 +612,139 @@ async function fetchScene(sceneDate, sceneIdx) {
 
         updateFetchedCompareBar();
 
+        // First fetched scene goes straight onto the map — that's why it was fetched
+        if (!currentOverlay) showOnMap();
+
     } catch (err) {
-        btn.textContent = "Failed";
-        btn.disabled = false;
-        btn.title = err.message;
-        setTimeout(() => {
-            btn.textContent = "Retry";
-            btn.classList.remove("scene-fetch-done");
-        }, 2000);
+        setButtonLoading(btn, false, "Retry");
+        btn.classList.add("scene-fetch-failed");
+        btn.title = scrubSentinel(err.message);
+        showToast("Couldn't fetch this scene", err.message, "error");
     }
 }
 
 // ── Map preview overlay ──────────────────────────────────────────
 
-function showPreview(rasterPath, bbox, productId) {
+/** Format a legend value with sensible precision for its magnitude. */
+function fmtVal(v) {
+    const a = Math.abs(v);
+    if (a >= 1000) return v.toFixed(0);
+    if (a >= 10)   return v.toFixed(1);
+    if (a >= 0.01 || a === 0) return v.toFixed(2);
+    return v.toExponential(1);
+}
+
+async function showPreview(rasterPath, bbox, productId, meta = {}) {
+    const loading = document.getElementById("map-loading");
+    const bounds  = bboxBounds(bbox);
+    const url     = `/api/preview/${encodeURI(rasterPath)}?product_id=${productId}`;
+
+    loading.classList.remove("hidden");
+    map.fitBounds(bounds, { padding: [60, 60] });
+
+    try {
+        // Fetch rather than let <img> load it, so we can read the value range
+        // headers for the legend and surface errors instead of a broken image.
+        const res = await fetch(url);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const vmin = parseFloat(res.headers.get("X-Value-Min"));
+        const vmax = parseFloat(res.headers.get("X-Value-Max"));
+        const objectUrl = URL.createObjectURL(await res.blob());
+
+        clearPreview();
+        const opacity = +document.getElementById("legend-opacity").value / 100;
+        currentOverlay = L.imageOverlay(objectUrl, bounds, { opacity, interactive: false }).addTo(map);
+        currentOverlayUrl = objectUrl;
+
+        // Outline only while previewing, so the AOI fill doesn't tint the raster
+        drawnItems.eachLayer(l => l.setStyle({ fillOpacity: 0 }));
+
+        renderLegend(productId, vmin, vmax, meta);
+        markPreviewingScene(meta.sceneIdx);
+    } catch (err) {
+        showToast("Couldn't render the preview", err.message, "error");
+    } finally {
+        loading.classList.add("hidden");
+    }
+}
+
+function renderLegend(productId, vmin, vmax, meta) {
+    const legend = document.getElementById("map-legend");
+    const stops  = products[productId]?.colormap;
+    const hasScale = Array.isArray(stops) && isFinite(vmin) && isFinite(vmax);
+
+    document.getElementById("legend-title").textContent =
+        meta.title || products[productId]?.label || "Preview";
+    document.getElementById("legend-subtitle").textContent = meta.subtitle || "";
+
+    document.getElementById("legend-scale").classList.toggle("hidden", !hasScale);
+    if (hasScale) {
+        const gradient = stops.map(([r, g, b]) => `rgb(${r},${g},${b})`).join(", ");
+        document.getElementById("legend-bar").style.background = `linear-gradient(to right, ${gradient})`;
+        document.getElementById("legend-min").textContent = fmtVal(vmin);
+        document.getElementById("legend-mid").textContent = fmtVal((vmin + vmax) / 2);
+        document.getElementById("legend-max").textContent = fmtVal(vmax);
+    }
+
+    legend.classList.remove("hidden");
+}
+
+function markPreviewingScene(sceneIdx) {
+    document.querySelectorAll(".scene-item").forEach(el => {
+        const active = sceneIdx != null && el.id === `scene-item-${sceneIdx}`;
+        el.classList.toggle("scene-previewing", active);
+        const btn = el.querySelector(".scene-preview-btn");
+        if (btn) {
+            btn.classList.toggle("is-active", active);
+            btn.querySelector("span").textContent = active ? "On map" : "Show on map";
+        }
+    });
+}
+
+function clearPreview() {
     if (currentOverlay) {
         map.removeLayer(currentOverlay);
         currentOverlay = null;
     }
-
-    const bounds = [
-        [bbox[1], bbox[0]],  // [south, west]
-        [bbox[3], bbox[2]],  // [north, east]
-    ];
-
-    const url = `/api/preview/${encodeURI(rasterPath)}?product_id=${productId}`;
-
-    currentOverlay = L.imageOverlay(url, bounds, {
-        opacity: 0.85,
-        interactive: true,
-    }).addTo(map);
-
-    map.fitBounds(bounds, { padding: [60, 60] });
+    if (currentOverlayUrl) {
+        URL.revokeObjectURL(currentOverlayUrl);
+        currentOverlayUrl = null;
+    }
+    drawnItems?.eachLayer(l => l.setStyle({ fillOpacity: AOI_STYLE.fillOpacity }));
+    document.getElementById("map-legend").classList.add("hidden");
+    markPreviewingScene(null);
 }
 
-// ── Error display ────────────────────────────────────────────────
+// ── Errors & toasts ──────────────────────────────────────────────
 
 function showError(message) {
     const area    = document.getElementById("results-area");
     const content = document.getElementById("results-content");
 
     area.classList.remove("hidden");
-    content.innerHTML = `<div class="error-msg">${message}</div>`;
+    content.innerHTML = `<div class="error-msg" role="alert">${ICONS.alert}<span>${escapeHtml(scrubSentinel(message))}</span></div>`;
+}
+
+function showToast(title, body = "", type = "info", timeout = 6000) {
+    const region = document.getElementById("toast-region");
+    const toast = document.createElement("div");
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <div>
+            <div class="toast-title">${escapeHtml(scrubSentinel(title))}</div>
+            ${body ? `<div class="toast-body">${escapeHtml(scrubSentinel(body))}</div>` : ""}
+        </div>`;
+    region.appendChild(toast);
+
+    const dismiss = () => {
+        toast.classList.add("leaving");
+        toast.addEventListener("animationend", () => toast.remove(), { once: true });
+    };
+    toast.addEventListener("click", dismiss);
+    setTimeout(dismiss, timeout);
 }
 
 // ── CSV Preview Modal ──────────────────────────────────────────────
@@ -512,10 +752,13 @@ function showError(message) {
 async function previewCsv(csvPath) {
     const modal = document.getElementById("csv-modal");
     const body  = document.getElementById("csv-modal-body");
+    const count = document.getElementById("csv-modal-count");
 
     // Show loading state
-    body.innerHTML = '<div class="csv-empty">Loading CSV…</div>';
+    body.innerHTML = '<div class="csv-empty">Loading…</div>';
+    count.classList.add("hidden");
     modal.classList.remove("hidden");
+    document.getElementById("csv-modal-close").focus();
 
     try {
         const res = await fetch(`/api/download/${encodeURI(csvPath)}`);
@@ -531,16 +774,19 @@ async function previewCsv(csvPath) {
         const headers = rows[0];
         const dataRows = rows.slice(1);
 
+        count.textContent = `${dataRows.length} row${dataRows.length === 1 ? "" : "s"}`;
+        count.classList.remove("hidden");
+
         let tableHtml = '<table class="csv-table"><thead><tr>';
         headers.forEach(h => {
-            tableHtml += `<th>${escapeHtml(h)}</th>`;
+            tableHtml += `<th>${escapeHtml(scrubSentinel(h.replace(/_/g, " ")))}</th>`;
         });
         tableHtml += '</tr></thead><tbody>';
 
         dataRows.forEach(row => {
             tableHtml += '<tr>';
             headers.forEach((_, i) => {
-                tableHtml += `<td>${escapeHtml(row[i] ?? "")}</td>`;
+                tableHtml += `<td>${escapeHtml(scrubSentinel(row[i] ?? ""))}</td>`;
             });
             tableHtml += '</tr>';
         });
@@ -548,7 +794,7 @@ async function previewCsv(csvPath) {
 
         body.innerHTML = tableHtml;
     } catch (err) {
-        body.innerHTML = `<div class="csv-empty">Failed to load CSV: ${escapeHtml(err.message)}</div>`;
+        body.innerHTML = `<div class="csv-empty">Failed to load CSV: ${escapeHtml(scrubSentinel(err.message))}</div>`;
     }
 }
 
@@ -585,6 +831,20 @@ function parseCsvLine(line) {
     return result;
 }
 
+/**
+ * Strip "Sentinel" branding from backend-supplied text before it is shown.
+ * Mission names become their short codes (sentinel-2b → S2B, Sentinel5P → S5P,
+ * sentinel-2-l2a → S2-L2A) — the same codes the scene IDs already use.
+ */
+function scrubSentinel(str) {
+    if (str == null) return str;
+    return String(str)
+        .replace(/sentinel[\s-]*hub/gi, "imagery service")
+        .replace(/sentinel[-_ ]?(\d+[a-z]?)([-_][a-z0-9]+)*/gi, (m) =>
+            "S" + m.replace(/^sentinel[-_ ]?/i, "").toUpperCase())
+        .replace(/sentinel/gi, "satellite");
+}
+
 function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str;
@@ -604,9 +864,12 @@ async function openCompareModal() {
 
     compareSelectedRuns = [];
     runList.innerHTML = '<div class="csv-empty">Loading runs…</div>';
-    tableArea.innerHTML = '<div class="csv-empty">Select 2 or more runs to compare their scene metadata side by side.</div>';
-    document.getElementById("compare-execute-btn").disabled = true;
+    tableArea.innerHTML = '<div class="csv-empty">Select two or more runs on the left<br>to compare their scene metadata side by side.</div>';
+    const execBtn = document.getElementById("compare-execute-btn");
+    execBtn.disabled = true;
+    execBtn.querySelector(".btn-text").textContent = "Compare Selected";
     modal.classList.remove("hidden");
+    document.getElementById("compare-modal-close").focus();
 
     try {
         const res = await fetch("/api/runs");
@@ -614,14 +877,14 @@ async function openCompareModal() {
         const runs = await res.json();
 
         if (runs.length === 0) {
-            runList.innerHTML = '<div class="csv-empty">No past runs found in the output folder.</div>';
+            runList.innerHTML = '<div class="csv-empty">No past runs yet. Search for scenes and they will appear here.</div>';
             return;
         }
 
         // Group runs by "mission — product"
         const groups = {};
         runs.forEach(r => {
-            const key = `${r.mission} — ${r.product}`;
+            const key = scrubSentinel(`${r.mission} — ${r.product}`);
             (groups[key] ??= []).push(r);
         });
 
@@ -635,11 +898,14 @@ async function openCompareModal() {
                       })
                     : "";
                 const bboxStr = r.bbox.map(v => v.toFixed(2)).join(", ");
+                const product = scrubSentinel(r.product);
+                const sourceLabel = dateStr ? `${product} · ${dateStr}` : product;
                 html += `
-                    <label class="compare-run-item" data-run-id="${escapeHtml(r.id)}" data-csv="${escapeHtml(r.csv_path)}">
+                    <label class="compare-run-item" data-run-id="${escapeHtml(r.id)}" data-csv="${escapeHtml(r.csv_path)}"
+                           data-label="${escapeHtml(sourceLabel)}">
                         <input type="checkbox" />
                         <div class="compare-run-meta">
-                            <div class="compare-run-product">${escapeHtml(r.product)}</div>
+                            <div class="compare-run-product">${escapeHtml(product)}</div>
                             <div class="compare-run-details">${dateStr} · [${bboxStr}]</div>
                         </div>
                         <span class="compare-run-badge"></span>
@@ -655,7 +921,7 @@ async function openCompareModal() {
         });
 
     } catch (err) {
-        runList.innerHTML = `<div class="csv-empty">Failed to load runs: ${escapeHtml(err.message)}</div>`;
+        runList.innerHTML = `<div class="csv-empty">Failed to load runs: ${escapeHtml(scrubSentinel(err.message))}</div>`;
     }
 }
 
@@ -665,7 +931,7 @@ function toggleRunSelection(item, isChecked) {
 
     if (isChecked) {
         if (!compareSelectedRuns.find(r => r.id === runId)) {
-            compareSelectedRuns.push({ id: runId, csv: csvPath });
+            compareSelectedRuns.push({ id: runId, csv: csvPath, label: item.dataset.label });
         }
         item.classList.add("selected");
     } else {
@@ -712,7 +978,7 @@ async function executeComparison() {
         const results = await Promise.all(
             compareSelectedRuns.map(async (run, idx) => {
                 const res = await fetch(`/api/download/${encodeURI(run.csv)}`);
-                if (!res.ok) throw new Error(`Failed to fetch ${run.id}`);
+                if (!res.ok) throw new Error(`Failed to load run "${run.label}"`);
                 const text = await res.text();
                 const rows = text.trim().split("\n").map(parseCsvLine).filter(r => r.length > 0);
                 return { run, idx, headers: rows[0] || [], dataRows: rows.slice(1) };
@@ -723,9 +989,7 @@ async function executeComparison() {
         const merged = [];
         results.forEach(({ run, idx, headers, dataRows }) => {
             const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
-            // Build a short label for the source
-            const parts = run.id.split("_");
-            const label = parts.slice(0, 2).join(" ");
+            const label = run.label;
 
             dataRows.forEach(row => {
                 const rowObj = {};
@@ -775,14 +1039,11 @@ async function executeComparison() {
             </td>`;
 
             activeCols.forEach(col => {
-                let val = row[col] ?? "";
+                let val = scrubSentinel(row[col] ?? "");
                 // Format datetime nicely
                 if (col === "datetime" && val) {
                     try {
-                        val = new Date(val).toLocaleString("en-US", {
-                            year: "numeric", month: "short", day: "numeric",
-                            hour: "2-digit", minute: "2-digit",
-                        });
+                        val = new Date(val).toLocaleString("en-US", SCENE_DATE_FMT);
                     } catch (_) { /* keep raw */ }
                 }
                 // Truncate long scene IDs
@@ -800,7 +1061,7 @@ async function executeComparison() {
         tableArea.innerHTML = html;
 
     } catch (err) {
-        tableArea.innerHTML = `<div class="csv-empty">Comparison failed: ${escapeHtml(err.message)}</div>`;
+        tableArea.innerHTML = `<div class="csv-empty">Comparison failed: ${escapeHtml(scrubSentinel(err.message))}</div>`;
     }
 }
 
@@ -824,17 +1085,21 @@ function updateFetchedCompareBar() {
         bar = document.createElement("div");
         bar.id = "compare-fetched-bar";
         bar.className = "compare-fetched-bar";
-        content.insertBefore(bar, content.firstChild);
+        content.appendChild(bar);
     }
 
     bar.innerHTML = `
-        <span class="compare-fetched-bar-text">${fetchedScenes.length} fetched scenes ready to compare</span>
+        <span class="compare-fetched-bar-text">${fetchedScenes.length} scenes fetched</span>
         <button id="trigger-fetched-compare-btn" class="compare-fetched-bar-btn">
-            <span>Compare Scenes (${fetchedScenes.length})</span>
+            ${ICONS.compare}<span>Compare scenes</span>
         </button>
     `;
 
     document.getElementById("trigger-fetched-compare-btn").onclick = openFetchedCompareModal;
+}
+
+function sortedFetchedScenes() {
+    return [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
 }
 
 function populateSceneDropdowns(sortedScenes, selectedLeftIdx, selectedRightIdx) {
@@ -849,7 +1114,7 @@ function populateSceneDropdowns(sortedScenes, selectedLeftIdx, selectedRightIdx)
         return sortedScenes.map((s, idx) => {
             const dStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
             const sel = idx === currentIdx ? "selected" : "";
-            return `<option value="${idx}" ${sel}>${escapeHtml(dStr)} (${s.platform || 'Scene'})</option>`;
+            return `<option value="${idx}" ${sel}>${escapeHtml(dStr)} (${escapeHtml(s.platform || 'Scene')})</option>`;
         }).join("");
     }
 
@@ -860,7 +1125,7 @@ function populateSceneDropdowns(sortedScenes, selectedLeftIdx, selectedRightIdx)
 }
 
 function onCompareDropdownChange() {
-    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const sorted = sortedFetchedScenes();
     const leftIdx = +document.getElementById("compare-select-left").value;
     const rightIdx = +document.getElementById("compare-select-right").value;
 
@@ -871,7 +1136,7 @@ function onCompareDropdownChange() {
 }
 
 function onSplitDropdownChange() {
-    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const sorted = sortedFetchedScenes();
     const leftIdx = +document.getElementById("split-select-left").value;
     const rightIdx = +document.getElementById("split-select-right").value;
 
@@ -888,20 +1153,20 @@ function openFetchedCompareModal() {
     modal.classList.remove("hidden");
 
     // Sort fetched scenes chronologically by acquisition timestamp
-    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const sorted = sortedFetchedScenes();
     const sceneA = sorted[0];
     const sceneB = sorted[sorted.length - 1];
 
     populateSceneDropdowns(sorted, 0, sorted.length - 1);
 
     document.getElementById("fetched-compare-subtitle").textContent =
-        `${sceneA.mission} ${sceneA.productLabel} — ${fetchedScenes.length} fetched scenes available for comparison`;
+        `${sceneA.mission} · ${sceneA.productLabel} · ${fetchedScenes.length} scenes`;
 
     switchFetchedCompareTab("side-by-side", sceneA, sceneB);
 }
 
 function switchFetchedCompareTab(tabName, sceneAOverride, sceneBOverride) {
-    const sorted = [...fetchedScenes].sort((a, b) => (a.datetime || "").localeCompare(b.datetime || ""));
+    const sorted = sortedFetchedScenes();
 
     const selLeft = document.getElementById("compare-select-left");
     const selRight = document.getElementById("compare-select-right");
@@ -916,13 +1181,10 @@ function switchFetchedCompareTab(tabName, sceneAOverride, sceneBOverride) {
         const btn = document.getElementById(`tab-${t}`);
         const view = document.getElementById(`view-${t}`);
         if (!btn || !view) return;
-        if (t === tabName) {
-            btn.classList.add("active");
-            view.classList.remove("hidden");
-        } else {
-            btn.classList.remove("active");
-            view.classList.add("hidden");
-        }
+        const active = t === tabName;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-selected", active);
+        view.classList.toggle("hidden", !active);
     });
 
     if (tabName === "side-by-side") {
@@ -936,28 +1198,33 @@ function switchFetchedCompareTab(tabName, sceneAOverride, sceneBOverride) {
     }
 }
 
+/**
+ * Create a comparison map. Zoom sits bottom-right so it doesn't collide with
+ * the scene label pinned to the top-left of each panel.
+ */
+function makeCompareMap(elementId, center) {
+    const m = L.map(elementId, { center, zoom: 10, zoomControl: false });
+    L.control.zoom({ position: "bottomright" }).addTo(m);
+    L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(m);
+    return m;
+}
+
+function previewUrl(scene) {
+    return `/api/preview/${encodeURI(scene.rasterPath)}?product_id=${scene.productId}`;
+}
+
 function initDualMaps(sceneA, sceneB) {
-    const bbox = sceneA.bbox;
-    const bounds = [
-        [bbox[1], bbox[0]],
-        [bbox[3], bbox[2]],
-    ];
-    const center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+    const bounds = bboxBounds(sceneA.bbox);
+    const center = [(sceneA.bbox[1] + sceneA.bbox[3]) / 2, (sceneA.bbox[0] + sceneA.bbox[2]) / 2];
 
     if (leftMap) { leftMap.remove(); leftMap = null; }
     if (rightMap) { rightMap.remove(); rightMap = null; }
 
-    leftMap = L.map("map-compare-left", { center, zoom: 10, zoomControl: true });
-    rightMap = L.map("map-compare-right", { center, zoom: 10, zoomControl: true });
+    leftMap = makeCompareMap("map-compare-left", center);
+    rightMap = makeCompareMap("map-compare-right", center);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(leftMap);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(rightMap);
-
-    const urlA = `/api/preview/${encodeURI(sceneA.rasterPath)}?product_id=${sceneA.productId}`;
-    const urlB = `/api/preview/${encodeURI(sceneB.rasterPath)}?product_id=${sceneB.productId}`;
-
-    leftOverlay = L.imageOverlay(urlA, bounds, { opacity: 0.9 }).addTo(leftMap);
-    rightOverlay = L.imageOverlay(urlB, bounds, { opacity: 0.9 }).addTo(rightMap);
+    leftOverlay = L.imageOverlay(previewUrl(sceneA), bounds, { opacity: 0.9 }).addTo(leftMap);
+    rightOverlay = L.imageOverlay(previewUrl(sceneB), bounds, { opacity: 0.9 }).addTo(rightMap);
 
     leftMap.fitBounds(bounds, { padding: [30, 30] });
     rightMap.fitBounds(bounds, { padding: [30, 30] });
@@ -980,23 +1247,15 @@ function initDualMaps(sceneA, sceneB) {
 }
 
 function initSplitSlider(sceneA, sceneB) {
-    const bbox = sceneA.bbox;
-    const bounds = [
-        [bbox[1], bbox[0]],
-        [bbox[3], bbox[2]],
-    ];
-    const center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+    const bounds = bboxBounds(sceneA.bbox);
+    const center = [(sceneA.bbox[1] + sceneA.bbox[3]) / 2, (sceneA.bbox[0] + sceneA.bbox[2]) / 2];
 
     if (splitMap) { splitMap.remove(); splitMap = null; }
 
-    splitMap = L.map("map-compare-split", { center, zoom: 10, zoomControl: true });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(splitMap);
+    splitMap = makeCompareMap("map-compare-split", center);
 
-    const urlA = `/api/preview/${encodeURI(sceneA.rasterPath)}?product_id=${sceneA.productId}`;
-    const urlB = `/api/preview/${encodeURI(sceneB.rasterPath)}?product_id=${sceneB.productId}`;
-
-    splitOverlayLeft = L.imageOverlay(urlA, bounds, { opacity: 0.95 }).addTo(splitMap);
-    splitOverlayRight = L.imageOverlay(urlB, bounds, { opacity: 0.95 }).addTo(splitMap);
+    splitOverlayLeft = L.imageOverlay(previewUrl(sceneA), bounds, { opacity: 0.95 }).addTo(splitMap);
+    splitOverlayRight = L.imageOverlay(previewUrl(sceneB), bounds, { opacity: 0.95 }).addTo(splitMap);
 
     splitMap.fitBounds(bounds, { padding: [30, 30] });
 
@@ -1032,33 +1291,24 @@ function initMultiGridMaps(sortedScenes) {
     const count = scenesToDisplay.length;
     container.className = `multi-grid-container grid-${count}`;
 
-    const fmtOpt = { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
-
     scenesToDisplay.forEach((s, idx) => {
-        const dateStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
+        const dateStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", SCENE_DATE_FMT) : s.sceneDate;
         const panel = document.createElement("div");
         panel.className = "map-panel";
         panel.innerHTML = `
             <div class="map-panel-header">
-                <span class="badge badge-left">Scene ${idx + 1}</span>
+                <span class="badge badge-left">${idx + 1}</span>
                 <span class="panel-date">${escapeHtml(dateStr)}</span>
             </div>
             <div id="map-grid-${idx}" class="compare-map"></div>
         `;
         container.appendChild(panel);
 
-        const bbox = s.bbox;
-        const bounds = [
-            [bbox[1], bbox[0]],
-            [bbox[3], bbox[2]],
-        ];
-        const center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+        const bounds = bboxBounds(s.bbox);
+        const center = [(s.bbox[1] + s.bbox[3]) / 2, (s.bbox[0] + s.bbox[2]) / 2];
 
-        const gMap = L.map(`map-grid-${idx}`, { center, zoom: 10, zoomControl: true });
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(gMap);
-
-        const url = `/api/preview/${encodeURI(s.rasterPath)}?product_id=${s.productId}`;
-        L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(gMap);
+        const gMap = makeCompareMap(`map-grid-${idx}`, center);
+        L.imageOverlay(previewUrl(s), bounds, { opacity: 0.9 }).addTo(gMap);
         gMap.fitBounds(bounds, { padding: [20, 20] });
 
         gridMaps.push(gMap);
@@ -1084,68 +1334,40 @@ function initMultiGridMaps(sortedScenes) {
 
 function renderFetchedDataTable(sortedScenes) {
     const area = document.getElementById("fetched-table-area");
-    const fmtOpt = { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
 
-    let ths = sortedScenes.map((s, idx) => {
-        const dateStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
-        return `<th>Scene ${idx + 1}<br><span style="font-weight:normal; text-transform:none">${escapeHtml(dateStr)}</span></th>`;
+    const ths = sortedScenes.map((s, idx) => {
+        const dateStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", SCENE_DATE_FMT) : s.sceneDate;
+        return `<th>Scene ${idx + 1}<span class="th-sub">${escapeHtml(dateStr)}</span></th>`;
     }).join("");
 
-    let rowProduct = sortedScenes.map(s => `<td class="matrix-col-val">${escapeHtml(s.mission)} — ${escapeHtml(s.productLabel)}</td>`).join("");
-    let rowTime = sortedScenes.map(s => {
-        const dStr = s.datetime ? new Date(s.datetime).toLocaleString("en-US", fmtOpt) : s.sceneDate;
-        return `<td class="matrix-col-val">${escapeHtml(dStr)}</td>`;
-    }).join("");
-    let rowCloud = sortedScenes.map(s => `<td class="matrix-col-val">${s.cloudCover != null ? s.cloudCover + '%' : 'N/A'}</td>`).join("");
-    let rowPlatform = sortedScenes.map(s => `<td class="matrix-col-val">${escapeHtml(s.platform)}</td>`).join("");
-    let rowId = sortedScenes.map(s => `<td class="matrix-col-val" style="font-size:11px; word-break:break-all">${escapeHtml(s.sceneId)}</td>`).join("");
-    let rowBbox = sortedScenes.map(s => `<td class="matrix-col-val">[${s.bbox.join(", ")}]</td>`).join("");
-    let rowDownload = sortedScenes.map(s => `
-        <td>
-            <a class="download-btn" href="/api/download/${encodeURI(s.rasterPath)}?product_id=${s.productId}" download>
-                Download
-            </a>
-        </td>
-    `).join("");
+    const row = (label, cells) => `<tr><td>${label}</td>${cells}</tr>`;
+    const cells = (fn) => sortedScenes.map(fn).join("");
 
     area.innerHTML = `
-        <div class="matrix-table-wrapper" style="max-width: none">
+        <div class="matrix-table-wrapper">
             <table class="matrix-table">
                 <thead>
                     <tr>
-                        <th>Metadata Parameter</th>
+                        <th>Parameter</th>
                         ${ths}
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Mission &amp; Product</td>
-                        ${rowProduct}
-                    </tr>
-                    <tr>
-                        <td>Acquisition Time</td>
-                        ${rowTime}
-                    </tr>
-                    <tr>
-                        <td>Cloud Cover</td>
-                        ${rowCloud}
-                    </tr>
-                    <tr>
-                        <td>Platform / Satellite</td>
-                        ${rowPlatform}
-                    </tr>
-                    <tr>
-                        <td>Scene ID</td>
-                        ${rowId}
-                    </tr>
-                    <tr>
-                        <td>Bounding Box</td>
-                        ${rowBbox}
-                    </tr>
-                    <tr>
-                        <td>Download Raster</td>
-                        ${rowDownload}
-                    </tr>
+                    ${row("Mission &amp; Product", cells(s => `<td class="matrix-col-val">${escapeHtml(s.mission)} — ${escapeHtml(s.productLabel)}</td>`))}
+                    ${row("Acquisition Time", cells(s => {
+                        const d = s.datetime ? new Date(s.datetime).toLocaleString("en-US", SCENE_DATE_FMT) : s.sceneDate;
+                        return `<td class="matrix-col-val">${escapeHtml(d)}</td>`;
+                    }))}
+                    ${row("Cloud Cover", cells(s => `<td>${s.cloudCover != null ? cloudPill(s.cloudCover) : '<span class="matrix-col-val">N/A</span>'}</td>`))}
+                    ${row("Platform", cells(s => `<td class="matrix-col-val">${escapeHtml(s.platform)}</td>`))}
+                    ${row("Scene ID", cells(s => `<td class="matrix-col-val" style="font-size:11px; word-break:break-all">${escapeHtml(s.sceneId)}</td>`))}
+                    ${row("Bounding Box", cells(s => `<td class="matrix-col-val">[${s.bbox.join(", ")}]</td>`))}
+                    ${row("Raster", cells(s => `
+                        <td>
+                            <a class="download-btn" href="/api/download/${encodeURI(s.rasterPath)}?product_id=${s.productId}" download>
+                                ${ICONS.download}<span>Download</span>
+                            </a>
+                        </td>`))}
                 </tbody>
             </table>
         </div>

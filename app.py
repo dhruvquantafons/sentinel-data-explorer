@@ -88,41 +88,47 @@ def _read_raster(path: str) -> np.ndarray:
     return raw.astype(np.float32)
 
 
-def _stretch(band: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _stretch(band: np.ndarray) -> tuple[np.ndarray, np.ndarray, Optional[tuple[float, float]]]:
     """
-    Percentile-stretch a single band to 0..1, returning (normalised, valid).
+    Percentile-stretch a single band to 0..1.
 
-    Besides NaN/Inf, pixels with absurd magnitudes are excluded: Sentinel Hub
-    writes ~±3.4e38 sentinels where a band has no data, and letting those into
-    the percentiles collapses the whole scene onto one flat colour.
+    Returns (normalised, valid, (vmin, vmax)); the range is None when the band
+    has no valid pixels. Besides NaN/Inf, pixels with absurd magnitudes are
+    excluded: Sentinel Hub writes ~±3.4e38 sentinels where a band has no data,
+    and letting those into the percentiles collapses the whole scene onto one
+    flat colour.
     """
     valid = np.isfinite(band) & (np.abs(band) < 1e6)
     if not valid.any():
-        return np.zeros(band.shape, dtype=np.float32), valid
+        return np.zeros(band.shape, dtype=np.float32), valid, None
 
     vmin, vmax = np.percentile(band[valid], [2, 98])
     if vmin == vmax:
         vmax = vmin + 1
     normed = np.zeros(band.shape, dtype=np.float32)
     normed[valid] = np.clip((band[valid] - vmin) / (vmax - vmin), 0, 1)
-    return normed, valid
+    return normed, valid, (float(vmin), float(vmax))
 
 
-COLORMAPS = {
-    "vegetation": _build_lut([
+# Colour stops, low → high. The frontend draws its legend from these too
+# (see /api/products), so the map key always matches the rendered raster.
+COLORMAP_STOPS: dict[str, list[tuple[int, int, int]]] = {
+    "vegetation": [
         (165, 0, 38), (215, 48, 39), (253, 174, 97),
         (255, 255, 191), (166, 217, 106), (26, 152, 80), (0, 104, 55),
-    ]),
-    "water": _build_lut([
+    ],
+    "water": [
         (139, 90, 43), (210, 180, 140), (255, 255, 255),
         (135, 206, 250), (30, 144, 255), (0, 0, 139),
-    ]),
-    "thermal": _build_lut([
+    ],
+    "thermal": [
         (0, 0, 80), (0, 80, 200), (0, 200, 200),
         (200, 200, 0), (200, 80, 0), (150, 0, 0),
-    ]),
-    "grayscale": _build_lut([(0, 0, 0), (128, 128, 128), (255, 255, 255)]),
+    ],
+    "grayscale": [(0, 0, 0), (128, 128, 128), (255, 255, 255)],
 }
+
+COLORMAPS = {name: _build_lut(stops) for name, stops in COLORMAP_STOPS.items()}
 
 # Map product IDs → colormap names (None = direct preview for RGB images)
 PRODUCT_CMAP: dict[str, Optional[str]] = {
@@ -164,7 +170,9 @@ def _cmap_for(product_id: Optional[str]) -> str:
     return "grayscale"
 
 
-def _render_rgba(arr: np.ndarray, cmap_name: str, alpha: Optional[int] = None) -> np.ndarray:
+def _render_rgba(
+    arr: np.ndarray, cmap_name: str, alpha: Optional[int] = None,
+) -> tuple[np.ndarray, Optional[tuple[float, float]]]:
     """
     Colourise a raster array into an HxWx4 uint8 RGBA image.
 
@@ -173,14 +181,18 @@ def _render_rgba(arr: np.ndarray, cmap_name: str, alpha: Optional[int] = None) -
     pixels come out fully transparent. *alpha* overrides the opacity of valid
     pixels — the map overlay uses the colormap's built-in value, downloads
     pass OPAQUE.
+
+    Returns (rgba, value_range), where value_range is the (low, high) data
+    value the colormap ends map to, or None for true-colour images.
     """
     if arr.ndim == 3 and arr.shape[2] == 1:
         arr = arr[:, :, 0]
 
+    value_range = None
     if arr.ndim == 2 or (arr.ndim == 3 and arr.shape[2] == 2):
         # Single-band index, or the first band of a 2-band radar scene.
         band = arr if arr.ndim == 2 else arr[:, :, 0]
-        normed, valid = _stretch(band)
+        normed, valid, value_range = _stretch(band)
         lut = COLORMAPS.get(cmap_name, COLORMAPS["grayscale"])
         rgba = lut[(normed * 255).astype(np.uint8)].copy()
 
@@ -189,7 +201,7 @@ def _render_rgba(arr: np.ndarray, cmap_name: str, alpha: Optional[int] = None) -
         channels = []
         valid = np.zeros(arr.shape[:2], dtype=bool)
         for c in range(3):
-            normed, ch_valid = _stretch(arr[:, :, c])
+            normed, ch_valid, _ = _stretch(arr[:, :, c])
             valid |= ch_valid
             channels.append((normed * 255).astype(np.uint8))
         opacity = np.full(arr.shape[:2], COLORMAPS["grayscale"][128, 3], dtype=np.uint8)
@@ -201,7 +213,7 @@ def _render_rgba(arr: np.ndarray, cmap_name: str, alpha: Optional[int] = None) -
     if alpha is not None:
         rgba[..., 3] = alpha
     rgba[~valid, 3] = 0          # transparent where there is no data
-    return rgba
+    return rgba, value_range
 
 
 def _colorize_tiff(path: str, product_id: Optional[str]) -> bytes:
@@ -217,7 +229,7 @@ def _colorize_tiff(path: str, product_id: Optional[str]) -> bytes:
             500, "Coloured downloads need the 'tifffile' package (pip install tifffile)"
         )
 
-    rgba = _render_rgba(_read_raster(path), _cmap_for(product_id), alpha=OPAQUE)
+    rgba, _ = _render_rgba(_read_raster(path), _cmap_for(product_id), alpha=OPAQUE)
 
     extratags = []
     with tifffile.TiffFile(path) as tif:
@@ -277,11 +289,14 @@ async def get_products():
     """Return the full product catalog as JSON (no secrets)."""
     result = {}
     for key, prod in PRODUCTS.items():
+        cmap = PRODUCT_CMAP.get(key)
         result[key] = {
             "mission": prod["mission"],
             "label": prod["label"],
             "format": prod["format"],
             "has_cloud_filter": prod["has_cloud_filter"],
+            # Legend colours for the map preview (None for true-colour imagery)
+            "colormap": COLORMAP_STOPS[cmap] if cmap else None,
         }
     return JSONResponse(result)
 
@@ -536,13 +551,19 @@ async def preview_file(
 
     # TIFF → convert to coloured PNG
     try:
-        rgba = _render_rgba(_read_raster(full), _cmap_for(product_id))
+        rgba, value_range = _render_rgba(_read_raster(full), _cmap_for(product_id))
         result = Image.fromarray(rgba)
+
+        # The data values the colormap ends correspond to, for the map legend
+        headers = {}
+        if value_range is not None:
+            headers["X-Value-Min"] = f"{value_range[0]:.6g}"
+            headers["X-Value-Max"] = f"{value_range[1]:.6g}"
 
         buf = io.BytesIO()
         result.save(buf, format="PNG")
         buf.seek(0)
-        return StreamingResponse(buf, media_type="image/png")
+        return StreamingResponse(buf, media_type="image/png", headers=headers)
 
     except HTTPException:
         raise

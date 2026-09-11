@@ -40,48 +40,68 @@
 
             <div class="sidebar-content">
 
-                <!-- Mission & Product -->
-                <div class="form-section">
-                    <label class="form-label" for="product-select">Mission &amp; Product</label>
+                <!-- Step 1: Mission & Product -->
+                <section class="form-section" data-step="product">
+                    <label class="form-label" for="product-select">
+                        <span class="step-num">1</span> Mission &amp; Product
+                    </label>
                     <select id="product-select" class="form-select">
                         <option value="" disabled selected>Loading products…</option>
                     </select>
-                </div>
+                </section>
 
-                <!-- Date Range -->
-                <div class="form-section">
-                    <label class="form-label">Date Range</label>
+                <!-- Step 2: Date Range -->
+                <section class="form-section" data-step="dates">
+                    <div class="form-label">
+                        <span class="step-num">2</span> Date Range
+                    </div>
                     <div class="date-inputs">
-                        <div class="date-field">
+                        <label class="date-field">
                             <span class="date-label">From</span>
                             <input type="date" id="date-from" class="form-input">
-                        </div>
-                        <div class="date-field">
+                        </label>
+                        <label class="date-field">
                             <span class="date-label">To</span>
                             <input type="date" id="date-to" class="form-input">
-                        </div>
+                        </label>
                     </div>
-                </div>
+                    <div class="date-presets" role="group" aria-label="Date range presets">
+                        <button type="button" class="chip" data-days="7">7 days</button>
+                        <button type="button" class="chip" data-days="30">30 days</button>
+                        <button type="button" class="chip" data-days="90">90 days</button>
+                        <button type="button" class="chip" data-days="365">1 year</button>
+                    </div>
+                    <p id="date-error" class="field-error hidden"></p>
+                </section>
 
-                <!-- AOI Bounding Box -->
-                <div class="form-section">
-                    <label class="form-label">AOI Bounding Box</label>
-                    <div id="bbox-display" class="bbox-display">
-                        <p class="bbox-hint">Draw a rectangle on the map to define your Area of Interest</p>
+                <!-- Step 3: AOI Bounding Box -->
+                <section class="form-section" data-step="aoi">
+                    <div class="form-label">
+                        <span class="step-num">3</span> Area of Interest
                     </div>
-                </div>
+                    <div id="bbox-display" class="bbox-display">
+                        <p class="bbox-hint">
+                            Use the
+                            <span class="inline-icon" aria-hidden="true">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(37,99,235,0.15)" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="4 3"/></svg>
+                            </span>
+                            rectangle tool on the map to draw your area
+                        </p>
+                    </div>
+                </section>
 
                 <!-- Fetch button -->
                 <button id="fetch-btn" class="fetch-btn" disabled>
-                    <span class="btn-text">Fetch Satellite Data</span>
+                    <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    <span class="btn-text">Search Scenes</span>
                 </button>
+                <p id="fetch-hint" class="fetch-hint">Pick a product and draw an area to begin</p>
 
-                <!-- Loading spinner -->
-                <div id="status-area" class="status-area hidden">
-                    <div class="loader">
-                        <div class="loader-ring"></div>
-                        <span class="loader-text">Contacting satellite data service…</span>
-                    </div>
+                <!-- Loading state -->
+                <div id="status-area" class="status-area hidden" role="status">
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
                 </div>
 
                 <!-- Results -->
@@ -89,10 +109,12 @@
                     <div class="results-header">Results</div>
                     <div id="results-content" class="results-content"></div>
                 </div>
+            </div>
 
-                <!-- Compare button -->
+            <div class="sidebar-footer">
                 <button id="compare-btn" class="compare-btn">
-                    <span class="btn-text">Compare Datasets</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+                    <span class="btn-text">Compare Past Runs</span>
                 </button>
             </div>
 
@@ -102,14 +124,50 @@
         </aside>
 
         <!-- ── Map ─────────────────────────────────────── -->
-        <div id="map" class="map"></div>
+        <div class="map-wrap">
+            <div id="map" class="map"></div>
+
+            <!-- Legend / layer card for the raster preview -->
+            <div id="map-legend" class="map-legend hidden" aria-live="polite">
+                <div class="legend-head">
+                    <div class="legend-titles">
+                        <div id="legend-title" class="legend-title"></div>
+                        <div id="legend-subtitle" class="legend-subtitle"></div>
+                    </div>
+                    <button id="legend-close" class="icon-btn" aria-label="Remove preview from map" title="Remove preview">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="legend-scale" class="legend-scale">
+                    <div id="legend-bar" class="legend-bar"></div>
+                    <div class="legend-ticks">
+                        <span id="legend-min"></span>
+                        <span id="legend-mid"></span>
+                        <span id="legend-max"></span>
+                    </div>
+                </div>
+                <label class="legend-opacity">
+                    <span>Opacity</span>
+                    <input type="range" id="legend-opacity" min="0" max="100" value="85" aria-label="Preview opacity">
+                    <span id="legend-opacity-val" class="legend-opacity-val">85%</span>
+                </label>
+            </div>
+
+            <div id="map-loading" class="map-loading hidden" role="status">
+                <span class="btn-spinner dark" aria-hidden="true"></span>
+                <span>Rendering preview…</span>
+            </div>
+        </div>
     </div>
 
+    <!-- Toasts -->
+    <div id="toast-region" class="toast-region" aria-live="assertive"></div>
+
     <!-- Comparison Modal -->
-    <div id="compare-modal" class="compare-modal-overlay hidden">
+    <div id="compare-modal" class="compare-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="compare-modal-title">
         <div class="compare-modal">
             <div class="compare-modal-header">
-                <div class="csv-modal-title">Temporal Data Comparison</div>
+                <div id="compare-modal-title" class="csv-modal-title">Compare Past Runs</div>
                 <button id="compare-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
             </div>
             <div class="compare-modal-content">
@@ -134,10 +192,13 @@
     </div>
 
     <!-- CSV Preview Modal -->
-    <div id="csv-modal" class="csv-modal-overlay hidden">
+    <div id="csv-modal" class="csv-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="csv-modal-title">
         <div class="csv-modal">
             <div class="csv-modal-header">
-                <div class="csv-modal-title">Scene Metadata Preview</div>
+                <div class="csv-modal-title">
+                    <span id="csv-modal-title">Scene Metadata</span>
+                    <span id="csv-modal-count" class="count-pill hidden"></span>
+                </div>
                 <button id="csv-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
             </div>
             <div id="csv-modal-body" class="csv-modal-body">
@@ -147,29 +208,21 @@
     </div>
 
     <!-- Fetched Scenes Visual & Data Comparison Modal -->
-    <div id="fetched-compare-modal" class="fetched-compare-modal-overlay hidden">
+    <div id="fetched-compare-modal" class="fetched-compare-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="fetched-compare-heading">
         <div class="fetched-compare-modal">
             <div class="fetched-compare-modal-header">
                 <div class="fetched-compare-title">
                     <div>
-                        <div class="modal-heading">Raster &amp; Temporal Dataset Comparison</div>
+                        <div id="fetched-compare-heading" class="modal-heading">Compare Fetched Scenes</div>
                         <div id="fetched-compare-subtitle" class="modal-subheading">Comparing selected scenes</div>
                     </div>
                 </div>
                 
-                <div class="fetched-compare-tabs">
-                    <button id="tab-side-by-side" class="tab-btn active">
-                        Side-by-Side
-                    </button>
-                    <button id="tab-split-slider" class="tab-btn">
-                        Split Slider
-                    </button>
-                    <button id="tab-multi-grid" class="tab-btn">
-                        Multi-Grid
-                    </button>
-                    <button id="tab-data-table" class="tab-btn">
-                        Data Matrix
-                    </button>
+                <div class="fetched-compare-tabs" role="tablist">
+                    <button id="tab-side-by-side" class="tab-btn active" role="tab">Side-by-Side</button>
+                    <button id="tab-split-slider" class="tab-btn" role="tab">Swipe</button>
+                    <button id="tab-multi-grid" class="tab-btn" role="tab">Grid</button>
+                    <button id="tab-data-table" class="tab-btn" role="tab">Metadata</button>
                 </div>
 
                 <button id="fetched-compare-modal-close" class="csv-modal-close" aria-label="Close">✕</button>
@@ -181,14 +234,14 @@
                     <div class="dual-map-container">
                         <div class="map-panel">
                             <div class="map-panel-header" id="compare-panel-header-left">
-                                <span class="badge badge-left">Left Map</span>
+                                <span class="badge badge-left">Left</span>
                                 <select id="compare-select-left" class="compare-scene-select" aria-label="Select left scene"></select>
                             </div>
                             <div id="map-compare-left" class="compare-map"></div>
                         </div>
                         <div class="map-panel">
                             <div class="map-panel-header" id="compare-panel-header-right">
-                                <span class="badge badge-right">Right Map</span>
+                                <span class="badge badge-right">Right</span>
                                 <select id="compare-select-right" class="compare-scene-select" aria-label="Select right scene"></select>
                             </div>
                             <div id="map-compare-right" class="compare-map"></div>
@@ -204,7 +257,7 @@
                                 <span class="badge badge-left">Left</span>
                                 <select id="split-select-left" class="compare-scene-select" aria-label="Select left split scene"></select>
                             </div>
-                            <div class="split-hint">Drag slider horizontally to compare</div>
+                            <div class="split-hint">Drag across the map to swipe</div>
                             <div class="split-badge-item">
                                 <span class="badge badge-right">Right</span>
                                 <select id="split-select-right" class="compare-scene-select" aria-label="Select right split scene"></select>
