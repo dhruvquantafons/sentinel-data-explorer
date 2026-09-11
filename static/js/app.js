@@ -1,5 +1,5 @@
 /* ================================================================
-   TeraVerify — Frontend Logic
+   TerraVerify — Frontend Logic
    ================================================================ */
 
 // ── State ────────────────────────────────────────────────────────
@@ -521,6 +521,12 @@ function showResults(data) {
         previewCsv(this.dataset.csv);
     });
 
+    if (data.measurements_available === false) {
+        showToast("Measurements unavailable",
+            "The scene CSV lists the dates found, but the per-date measurements couldn't be calculated right now.",
+            "info");
+    }
+
     // Wire up all scene Fetch buttons
     content.querySelectorAll(".scene-fetch-btn").forEach(btn => {
         btn.addEventListener("click", function () {
@@ -783,10 +789,12 @@ async function previewCsv(csvPath) {
         });
         tableHtml += '</tr></thead><tbody>';
 
+        const wrapCol = headers.indexOf("Summary");
         dataRows.forEach(row => {
             tableHtml += '<tr>';
             headers.forEach((_, i) => {
-                tableHtml += `<td>${escapeHtml(scrubSentinel(row[i] ?? ""))}</td>`;
+                const cls = i === wrapCol ? ' class="cell-wrap"' : "";
+                tableHtml += `<td${cls}>${escapeHtml(scrubSentinel(row[i] ?? ""))}</td>`;
             });
             tableHtml += '</tr>';
         });
@@ -962,15 +970,21 @@ async function executeComparison() {
     const tableArea = document.getElementById("compare-table-area");
     tableArea.innerHTML = '<div class="csv-empty">Loading and merging data…</div>';
 
-    // Key columns to show in comparison
-    const SHOW_COLS = ["scene_id", "datetime", "platform", "cloud_cover_percent", "s5p_product_type", "orbit_state"];
-    const COL_LABELS = {
-        scene_id: "Scene ID",
-        datetime: "Date / Time",
-        platform: "Platform",
-        cloud_cover_percent: "Cloud %",
-        s5p_product_type: "S5P Type",
-        orbit_state: "Orbit",
+    // Columns to show. Each lists its header in the plain-language report
+    // CSV first, then the technical name used by CSVs from older runs.
+    const COMPARE_COLS = [
+        { label: "Date / Time", get: rowDateTime },
+        { label: "Satellite", keys: ["Satellite", "platform"] },
+        { label: "Area visible (%)", keys: ["Cloud-free part of your area (%)", "Part of your area with valid data (%)"] },
+        { label: "Data quality", keys: ["Data quality"] },
+        { label: "Summary", keys: ["Summary"], wrap: true },
+        { label: "Image cloud %", keys: ["Cloud cover of the full satellite image (%)", "cloud_cover_percent"] },
+        { label: "Scene ID", keys: ["Scene ID(s)", "scene_id"], truncate: 40 },
+    ];
+    const cellValue = (row, col) => {
+        if (col.get) return col.get(row);
+        const key = col.keys.find(k => row[k] != null && row[k] !== "");
+        return key ? row[key] : "";
     };
 
     try {
@@ -1003,12 +1017,8 @@ async function executeComparison() {
             });
         });
 
-        // Sort by datetime (ascending)
-        merged.sort((a, b) => {
-            const da = a.datetime || "";
-            const db = b.datetime || "";
-            return da.localeCompare(db);
-        });
+        // Sort chronologically (ascending)
+        merged.sort((a, b) => rowSortKey(a).localeCompare(rowSortKey(b)));
 
         if (merged.length === 0) {
             tableArea.innerHTML = '<div class="csv-empty">No scene data found in selected runs.</div>';
@@ -1016,15 +1026,15 @@ async function executeComparison() {
         }
 
         // Determine which columns to show (only those that have data)
-        const activeCols = SHOW_COLS.filter(col =>
-            merged.some(r => r[col] && r[col] !== "" && r[col] !== "N/A")
+        const activeCols = COMPARE_COLS.filter(col =>
+            merged.some(r => { const v = cellValue(r, col); return v && v !== "N/A"; })
         );
 
         // Build table
         let html = '<table class="csv-table"><thead><tr>';
         html += '<th>Source</th>';
         activeCols.forEach(col => {
-            html += `<th>${COL_LABELS[col] || col}</th>`;
+            html += `<th>${col.label}</th>`;
         });
         html += '</tr></thead><tbody>';
 
@@ -1039,19 +1049,12 @@ async function executeComparison() {
             </td>`;
 
             activeCols.forEach(col => {
-                let val = scrubSentinel(row[col] ?? "");
-                // Format datetime nicely
-                if (col === "datetime" && val) {
-                    try {
-                        val = new Date(val).toLocaleString("en-US", SCENE_DATE_FMT);
-                    } catch (_) { /* keep raw */ }
-                }
-                // Truncate long scene IDs
-                if (col === "scene_id" && val.length > 40) {
-                    const short = val.substring(0, 38) + "…";
+                const val = scrubSentinel(cellValue(row, col));
+                if (col.truncate && val.length > col.truncate) {
+                    const short = val.substring(0, col.truncate - 2) + "…";
                     html += `<td title="${escapeHtml(val)}">${escapeHtml(short)}</td>`;
                 } else {
-                    html += `<td>${escapeHtml(val)}</td>`;
+                    html += `<td${col.wrap ? ' class="cell-wrap"' : ""}>${escapeHtml(val)}</td>`;
                 }
             });
             html += '</tr>';
@@ -1063,6 +1066,20 @@ async function executeComparison() {
     } catch (err) {
         tableArea.innerHTML = `<div class="csv-empty">Comparison failed: ${escapeHtml(scrubSentinel(err.message))}</div>`;
     }
+}
+
+/** Readable date/time for a CSV row, from either CSV format. */
+function rowDateTime(row) {
+    if (row["Date"]) return `${row["Date"]} ${row["Time (UTC)"] || ""} UTC`.replace("  ", " ");
+    if (row.datetime) {
+        const d = new Date(row.datetime);
+        return isNaN(d) ? row.datetime : d.toLocaleString("en-US", SCENE_DATE_FMT);
+    }
+    return "";
+}
+
+function rowSortKey(row) {
+    return row["Date"] ? `${row["Date"]}T${row["Time (UTC)"] || ""}` : (row.datetime || "");
 }
 
 function closeCompareModal() {

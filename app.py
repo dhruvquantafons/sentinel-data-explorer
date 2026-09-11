@@ -5,6 +5,7 @@ Wraps the existing sentinel_data_api_example_second.py pipeline as REST endpoint
 
 import os
 import io
+import re
 import sys
 import numpy as np
 from PIL import Image
@@ -26,13 +27,13 @@ from sentinel_data_api_example_second import (
     get_access_token,
     search_scenes,
     fetch_product,
-    save_scenes_csv,
     build_run_paths,
     PRODUCTS,
     CLIENT_ID,
     CLIENT_SECRET,
     OUTPUT_DIR,
 )
+from scene_report import build_report, write_report_csv, catalog_filter_for, matches_product
 
 # ─── App setup ───────────────────────────────────────────────────────
 
@@ -326,9 +327,13 @@ async def process_data(req: ProcessRequest):
         scenes = search_scenes(
             token, product["collection"], req.bbox,
             req.date_from, req.date_to, product["has_cloud_filter"],
+            extra_filter=catalog_filter_for(req.product_id),
         )
     except Exception as e:
         raise HTTPException(502, f"Catalog search failed: {e}")
+
+    # Keep only scenes of the chosen product (e.g. the selected gas for 5P)
+    scenes = [s for s in scenes if matches_product(s, req.product_id)]
 
     if not scenes:
         raise HTTPException(
@@ -337,11 +342,16 @@ async def process_data(req: ProcessRequest):
             "Try widening the area or the date range.",
         )
 
-    # 3. Build output paths & save scene CSV
+    # 3. Build output paths & save a plain-language scene report CSV, with
+    #    product-specific measurements per date (vegetation cover, water
+    #    area, gas levels, …) from the Statistical API
     output_path, csv_path = build_run_paths(
         product["mission"], product["label"], req.bbox, product["extension"],
     )
-    save_scenes_csv(scenes, csv_path)
+    fieldnames, report_rows, measured = build_report(
+        token, req.product_id, product, req.bbox, scenes,
+    )
+    write_report_csv(fieldnames, report_rows, csv_path)
 
     # 4. Build response — scenes only, no raster
     csv_rel = os.path.relpath(csv_path, OUTPUT_DIR)
@@ -361,6 +371,7 @@ async def process_data(req: ProcessRequest):
         "scenes_count": len(scenes),
         "scenes": scene_summaries,
         "csv_path": csv_rel,
+        "measurements_available": measured,
         "bbox": req.bbox,
         "product_id": req.product_id,
         "product": {
@@ -421,10 +432,26 @@ async def fetch_scene(req: FetchSceneRequest):
     })
 
 
+# Run-folder mission prefix → display name. build_run_paths() writes the
+# mission name ("Optical_Imagery_…"); runs from older versions used the
+# satellite name ("Sentinel2_…").
+RUN_MISSIONS = {
+    **{p["mission"].replace(" ", "_").replace("-", ""): p["mission"] for p in PRODUCTS.values()},
+    "Sentinel1": "Radar (SAR)",
+    "Sentinel2": "Optical Imagery",
+    "Sentinel3": "Ocean & Land Color",
+    "Sentinel5P": "Atmospheric Air Quality",
+}
+RUN_NAME_RE = re.compile(
+    r'^(' + "|".join(re.escape(k) for k in sorted(RUN_MISSIONS, key=len, reverse=True)) + r')_(.+?)_'
+    r'(-?\d+\.\d{4})_(-?\d+\.\d{4})_(-?\d+\.\d{4})_(-?\d+\.\d{4})_'
+    r'(\d{8})_(\d{6})$'
+)
+
+
 @app.get("/api/runs")
 async def list_runs():
     """Return metadata for every past run stored in the output directory."""
-    import re
     from datetime import datetime as _dt
 
     runs = []
@@ -446,14 +473,9 @@ async def list_runs():
             continue
 
         # Parse folder name: Mission_Product_W_S_E_N_YYYYMMDD_HHMMSS
-        # e.g. Sentinel2_NDVI_72.1325_21.7563_72.1555_21.7761_20260908_163504
-        # or   Sentinel5P_CO_73.4930_22.2383_73.8776_22.5620_20260909_111427
-        m = re.match(
-            r'^(Sentinel\d+\w?)_(.+?)_'
-            r'(-?\d+\.\d{4})_(-?\d+\.\d{4})_(-?\d+\.\d{4})_(-?\d+\.\d{4})_'
-            r'(\d{8})_(\d{6})$',
-            name,
-        )
+        # e.g. Optical_Imagery_NDVI_72.1325_21.7563_72.1555_21.7761_20260908_163504
+        # or (older runs) Sentinel5P_CO_73.4930_22.2383_73.8776_22.5620_20260909_111427
+        m = RUN_NAME_RE.match(name)
         if not m:
             continue
 
@@ -461,14 +483,7 @@ async def list_runs():
         west, south, east, north = float(m.group(3)), float(m.group(4)), float(m.group(5)), float(m.group(6))
         ts_str = m.group(7) + m.group(8)
 
-        # Pretty-format mission category
-        mission_map = {
-            "Sentinel1": "Radar (SAR)",
-            "Sentinel2": "Optical Imagery",
-            "Sentinel3": "Ocean & Land Color",
-            "Sentinel5P": "Atmospheric Air Quality",
-        }
-        mission = mission_map.get(mission_raw, mission_raw.replace("Sentinel", "Satellite "))
+        mission = RUN_MISSIONS.get(mission_raw, mission_raw)
         product_label = product_raw.replace("_", " ")
 
         try:
@@ -487,6 +502,8 @@ async def list_runs():
             "csv_path": csv_rel,
         })
 
+    # Newest first (folder names no longer sort by time: prefixes differ)
+    runs.sort(key=lambda r: r["fetched_at"], reverse=True)
     return JSONResponse(runs)
 
 

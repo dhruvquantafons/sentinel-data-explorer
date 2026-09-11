@@ -241,7 +241,12 @@ def get_access_token(client_id: str, client_secret: str) -> str:
 # ---------------------------------------------------------------------
 def search_scenes(token: str, collection: str, bbox: list, date_from: str,
                    date_to: str, has_cloud_filter: bool,
-                   max_cloud_cover: int = 80) -> list:
+                   max_cloud_cover: int = 80, extra_filter: str = None) -> list:
+    """
+    extra_filter: optional CQL2 condition, e.g. "s5p:type = 'NO2'" so a
+    Sentinel-5P search returns only the chosen gas instead of every product
+    in the collection.
+    """
     headers = {"Authorization": f"Bearer {token}"}
     payload = {
         "collections": [collection],
@@ -249,11 +254,22 @@ def search_scenes(token: str, collection: str, bbox: list, date_from: str,
         "datetime": f"{date_from}T00:00:00Z/{date_to}T23:59:59Z",
         "limit": 10,
     }
+    conditions = []
     if has_cloud_filter:
-        payload["filter"] = f"eo:cloud_cover <= {max_cloud_cover}"
+        conditions.append(f"eo:cloud_cover <= {max_cloud_cover}")
+    if extra_filter:
+        conditions.append(extra_filter)
+    if conditions:
+        payload["filter"] = " and ".join(conditions)
         payload["filter-lang"] = "cql2-text"
 
     response = requests.post(CATALOG_URL, json=payload, headers=headers, timeout=30)
+    if response.status_code == 400 and extra_filter:
+        # Catalog rejected the extra condition: search without it
+        # (callers can still filter the results locally).
+        print("Catalog rejected filter, retrying without:", extra_filter)
+        return search_scenes(token, collection, bbox, date_from, date_to,
+                             has_cloud_filter, max_cloud_cover)
     if not response.ok:
         print("Catalog API error:", response.status_code, response.text)
     response.raise_for_status()
