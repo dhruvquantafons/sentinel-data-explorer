@@ -1563,7 +1563,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     vertical-align: top;
 }
 
-.matrix-table tr:last-child td { border-bottom: none; }
+.matrix-table tbody:last-child tr:last-child td { border-bottom: none; }
 
 .matrix-table th {
     background: var(--bg-secondary);
@@ -1585,7 +1585,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     font-weight: 500;
     color: var(--text-muted);
     width: 20%;
-    white-space: nowrap;
+    min-width: 170px;
+    max-width: 260px;
+    line-height: 1.4;
 }
 
 .matrix-col-val {
@@ -1593,6 +1595,35 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     font-family: var(--font-mono);
     font-size: 12px;
 }
+
+/* Section divider between scene metadata and CSV measurements */
+.matrix-table .matrix-section td {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    max-width: none;
+}
+
+.matrix-section-note {
+    margin-left: 8px;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.matrix-section-note .link-btn { margin-left: 4px; }
+
+.matrix-summary {
+    color: var(--text-primary);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.matrix-muted { color: var(--text-faint); }
 
 .compare-scene-select {
     min-width: 0;

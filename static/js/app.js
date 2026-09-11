@@ -607,6 +607,7 @@ async function fetchScene(sceneDate, sceneIdx) {
             productId: result.product_id,
             productLabel: data.product ? data.product.label : "Satellite Product",
             mission: data.product ? data.product.mission : "Satellite Product",
+            csvPath: data.csv_path,
         };
 
         const existingIdx = fetchedScenes.findIndex(s => s.sceneDate === sceneDate);
@@ -1386,9 +1387,102 @@ function renderFetchedDataTable(sortedScenes) {
                             </a>
                         </td>`))}
                 </tbody>
+                <tbody id="matrix-report-body">
+                    <tr class="matrix-section"><td colspan="${sortedScenes.length + 1}">Measurements <span class="matrix-section-note">Loading…</span></td></tr>
+                </tbody>
             </table>
         </div>
     `;
+
+    renderFetchedReportRows(sortedScenes);
+}
+
+// Report CSV columns already shown in the rows above, or not useful per scene
+const MATRIX_SKIP_COLS = new Set([
+    "Date", "Time (UTC)", "Satellite", "Scene ID(s)",
+    "Cloud cover of the full satellite image (%)",
+]);
+
+const reportCsvCache = {};
+
+/** Load a scene report CSV once, indexed by its "Date" column. */
+async function loadReportCsv(csvPath) {
+    if (!reportCsvCache[csvPath]) {
+        reportCsvCache[csvPath] = (async () => {
+            const res = await fetch(`/api/download/${encodeURI(csvPath)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const rows = (await res.text()).trim().split("\n").map(parseCsvLine).filter(r => r.length > 1);
+            const headers = rows[0] || [];
+            const dateIdx = headers.indexOf("Date");
+            const byDate = {};
+            if (dateIdx >= 0) {
+                rows.slice(1).forEach(r => {
+                    byDate[r[dateIdx]] = Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]));
+                });
+            }
+            return { headers, byDate };
+        })();
+        // Don't cache a failure — let the next open retry
+        reportCsvCache[csvPath].catch(() => delete reportCsvCache[csvPath]);
+    }
+    return reportCsvCache[csvPath];
+}
+
+function qualityPill(value) {
+    const level = { "Good": "low", "Fair": "mid", "Poor": "high", "No usable data": "high" }[value];
+    return level ? `<span class="cloud-pill ${level}">${escapeHtml(value)}</span>`
+                 : `<span class="matrix-muted">${escapeHtml(value || "—")}</span>`;
+}
+
+/**
+ * Append the per-date measurements from the search's scene CSV (vegetation
+ * cover, water area, gas levels, …) under the metadata rows.
+ */
+async function renderFetchedReportRows(sortedScenes) {
+    const body = document.getElementById("matrix-report-body");
+    const span = sortedScenes.length + 1;
+    const section = (note) =>
+        `<tr class="matrix-section"><td colspan="${span}">Measurements${note ? ` <span class="matrix-section-note">${note}</span>` : ""}</td></tr>`;
+
+    try {
+        // Scenes from one search share a CSV; load each distinct one
+        const paths = [...new Set(sortedScenes.map(s => s.csvPath).filter(Boolean))];
+        const reports = Object.fromEntries(await Promise.all(
+            paths.map(async p => [p, await loadReportCsv(p)])));
+        if (!document.body.contains(body)) return;      // tab re-rendered meanwhile
+
+        const sceneRows = sortedScenes.map(s => reports[s.csvPath]?.byDate[s.sceneDate] || null);
+        const headers = [...new Set(paths.flatMap(p => reports[p].headers))]
+            .filter(h => !MATRIX_SKIP_COLS.has(h) && sceneRows.some(r => r && r[h] !== ""));
+
+        if (!headers.length) {
+            body.innerHTML = section("No per-date measurements in this search's CSV.");
+            return;
+        }
+
+        const cell = (h, r) => {
+            const v = r ? scrubSentinel(r[h] ?? "") : "";
+            if (h === "Data quality") return `<td>${qualityPill(v)}</td>`;
+            if (h === "Summary") return `<td class="matrix-summary">${escapeHtml(v || "—")}</td>`;
+            if (v === "") return `<td class="matrix-muted">—</td>`;
+            return `<td class="matrix-col-val">${escapeHtml(v)}</td>`;
+        };
+
+        // Put the plain-language summary first, before the numbers
+        headers.sort((a, b) => (b === "Summary") - (a === "Summary"));
+
+        const csvLinks = paths.map(p =>
+            `<a class="link-btn" href="/api/download/${encodeURI(p)}" download>Download CSV</a>`).join(" ");
+        body.innerHTML = section(`From the scene CSV · ${csvLinks}`) + headers.map(h => `
+            <tr>
+                <td>${escapeHtml(scrubSentinel(h))}</td>
+                ${sceneRows.map(r => cell(h, r)).join("")}
+            </tr>`).join("");
+    } catch (err) {
+        if (document.body.contains(body)) {
+            body.innerHTML = section(`Couldn't load the scene CSV: ${escapeHtml(scrubSentinel(err.message))}`);
+        }
+    }
 }
 
 function closeFetchedCompareModal() {
