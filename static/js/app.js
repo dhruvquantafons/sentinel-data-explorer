@@ -418,7 +418,7 @@ async function fetchScene(sceneDate, sceneIdx) {
         // Show download + preview actions
         actionsEl.classList.remove("hidden");
         actionsEl.innerHTML = `
-            <a class="download-btn" href="/api/download/${encodeURI(result.raster_path)}" download>
+            <a class="download-btn" href="/api/download/${encodeURI(result.raster_path)}?product_id=${result.product_id}" download>
                 <span>Download ${ext}</span>
             </a>
             <button class="preview-btn scene-preview-btn"
@@ -1102,7 +1102,7 @@ function renderFetchedDataTable(sortedScenes) {
     let rowBbox = sortedScenes.map(s => `<td class="matrix-col-val">[${s.bbox.join(", ")}]</td>`).join("");
     let rowDownload = sortedScenes.map(s => `
         <td>
-            <a class="download-btn" href="/api/download/${encodeURI(s.rasterPath)}" download>
+            <a class="download-btn" href="/api/download/${encodeURI(s.rasterPath)}?product_id=${s.productId}" download>
                 Download
             </a>
         </td>

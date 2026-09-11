@@ -3,4 +3,5 @@ uvicorn[standard]
 requests
 numpy
 Pillow
+tifffile
 python-dotenv

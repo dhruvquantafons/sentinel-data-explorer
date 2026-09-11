@@ -5,8 +5,14 @@ Wraps the existing sentinel_data_api_example_second.py pipeline as REST endpoint
 
 import os
 import io
+import sys
 import numpy as np
 from PIL import Image
+
+try:
+    import tifffile
+except ImportError:      # optional, Pillow fallback below
+    tifffile = None
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
@@ -55,8 +61,51 @@ def _build_lut(colors: list[tuple[int, int, int]], n: int = 256) -> np.ndarray:
         hi = int((i + 1) * n / segs)
         for c in range(3):
             lut[lo:hi, c] = np.linspace(colors[i][c], colors[i + 1][c], hi - lo)
-        lut[lo:hi, 3] = 200          # semi-transparent overlay
+        lut[lo:hi, 3] = 235         # semi-transparent overlay
     return lut
+
+
+def _read_raster(path: str) -> np.ndarray:
+    """
+    Decode a GeoTIFF into a float32 array.
+
+    Sentinel Hub returns big-endian ("MM") float32 TIFFs. Pillow's libtiff
+    path hands those back without byte-swapping, which turns real index values
+    (roughly -1..1) into denormals and ~1e38 spikes, and it refuses to open the
+    2-band float radar files at all. tifffile decodes both correctly, so it is
+    preferred; Pillow stays as a fallback with an explicit swap.
+    """
+    if tifffile is not None:
+        return np.asarray(tifffile.imread(path), dtype=np.float32)
+
+    img = Image.open(path)
+    raw = np.array(img)
+    bits = img.tag_v2.get(258, (8,))
+    if not isinstance(bits, (tuple, list)):
+        bits = (bits,)
+    if img.tag_v2.prefix == b"MM" and sys.byteorder == "little" and max(bits) > 8:
+        raw = raw.byteswap()
+    return raw.astype(np.float32)
+
+
+def _stretch(band: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Percentile-stretch a single band to 0..1, returning (normalised, valid).
+
+    Besides NaN/Inf, pixels with absurd magnitudes are excluded: Sentinel Hub
+    writes ~±3.4e38 sentinels where a band has no data, and letting those into
+    the percentiles collapses the whole scene onto one flat colour.
+    """
+    valid = np.isfinite(band) & (np.abs(band) < 1e6)
+    if not valid.any():
+        return np.zeros(band.shape, dtype=np.float32), valid
+
+    vmin, vmax = np.percentile(band[valid], [2, 98])
+    if vmin == vmax:
+        vmax = vmin + 1
+    normed = np.zeros(band.shape, dtype=np.float32)
+    normed[valid] = np.clip((band[valid] - vmin) / (vmax - vmin), 0, 1)
+    return normed, valid
 
 
 COLORMAPS = {
@@ -93,6 +142,98 @@ PRODUCT_CMAP: dict[str, Optional[str]] = {
     "14": "thermal",      # SO2
     "15": "thermal",      # AER_AI
 }
+
+# GeoTIFF georeferencing tags, with the TIFF data type used to rewrite them.
+# 12 = double, 3 = short, 2 = ascii.
+GEO_TAGS = {
+    33550: 12,   # ModelPixelScale
+    33922: 12,   # ModelTiepoint
+    34264: 12,   # ModelTransformation
+    34735: 3,    # GeoKeyDirectory
+    34736: 12,   # GeoDoubleParams
+    34737: 2,    # GeoAsciiParams
+}
+
+OPAQUE = 255
+
+
+def _cmap_for(product_id: Optional[str]) -> str:
+    """Colormap name for a product, defaulting to grayscale."""
+    if product_id and product_id in PRODUCT_CMAP:
+        return PRODUCT_CMAP[product_id] or "grayscale"
+    return "grayscale"
+
+
+def _render_rgba(arr: np.ndarray, cmap_name: str, alpha: Optional[int] = None) -> np.ndarray:
+    """
+    Colourise a raster array into an HxWx4 uint8 RGBA image.
+
+    Single-band data (NDVI, EVI, radar VV, the S5P gases …) runs through the
+    product's colormap; 3-band data is treated as true-colour RGB. No-data
+    pixels come out fully transparent. *alpha* overrides the opacity of valid
+    pixels — the map overlay uses the colormap's built-in value, downloads
+    pass OPAQUE.
+    """
+    if arr.ndim == 3 and arr.shape[2] == 1:
+        arr = arr[:, :, 0]
+
+    if arr.ndim == 2 or (arr.ndim == 3 and arr.shape[2] == 2):
+        # Single-band index, or the first band of a 2-band radar scene.
+        band = arr if arr.ndim == 2 else arr[:, :, 0]
+        normed, valid = _stretch(band)
+        lut = COLORMAPS.get(cmap_name, COLORMAPS["grayscale"])
+        rgba = lut[(normed * 255).astype(np.uint8)].copy()
+
+    elif arr.ndim == 3 and arr.shape[2] >= 3:
+        # True-colour / multispectral: stretch each channel independently.
+        channels = []
+        valid = np.zeros(arr.shape[:2], dtype=bool)
+        for c in range(3):
+            normed, ch_valid = _stretch(arr[:, :, c])
+            valid |= ch_valid
+            channels.append((normed * 255).astype(np.uint8))
+        opacity = np.full(arr.shape[:2], COLORMAPS["grayscale"][128, 3], dtype=np.uint8)
+        rgba = np.stack(channels + [opacity], axis=-1)
+
+    else:
+        raise HTTPException(400, "Unsupported TIFF band layout")
+
+    if alpha is not None:
+        rgba[..., 3] = alpha
+    rgba[~valid, 3] = 0          # transparent where there is no data
+    return rgba
+
+
+def _colorize_tiff(path: str, product_id: Optional[str]) -> bytes:
+    """
+    Render a data GeoTIFF into an RGBA GeoTIFF that looks like the map preview.
+
+    The georeferencing tags are copied across, so the coloured file still lines
+    up in QGIS/ArcGIS — but the pixel values are display colours, not the
+    original measurements. The raw float raster stays available via ?raw=1.
+    """
+    if tifffile is None:
+        raise HTTPException(
+            500, "Coloured downloads need the 'tifffile' package (pip install tifffile)"
+        )
+
+    rgba = _render_rgba(_read_raster(path), _cmap_for(product_id), alpha=OPAQUE)
+
+    extratags = []
+    with tifffile.TiffFile(path) as tif:
+        tags = tif.pages[0].tags
+        for code, dtype in GEO_TAGS.items():
+            tag = tags.get(code)
+            if tag is None or tag.value is None:
+                continue
+            value = tag.value
+            count = len(value) if not isinstance(value, str) else len(value) + 1
+            extratags.append((code, dtype, count, value, True))
+
+    buf = io.BytesIO()
+    tifffile.imwrite(buf, rgba, photometric="rgb", extrasamples="unassalpha",
+                     compression="deflate", extratags=extratags)
+    return buf.getvalue()
 
 
 class LoginRequest(BaseModel):
@@ -335,14 +476,42 @@ async def list_runs():
 
 
 @app.get("/api/download/{filepath:path}")
-async def download_file(filepath: str):
-    """Serve a generated file from the output directory."""
+async def download_file(
+    filepath: str,
+    product_id: Optional[str] = Query(None),
+    raw: bool = Query(False),
+):
+    """
+    Serve a generated file from the output directory.
+
+    Data TIFFs are colourised with the same colormap as the map preview, so the
+    downloaded file opens in colour instead of as a flat single-band image.
+    Pass ?raw=1 to get the untouched float GeoTIFF with the original
+    measurement values.
+    """
     full = os.path.join(OUTPUT_DIR, filepath)
     if not os.path.isfile(full):
         raise HTTPException(404, "File not found")
     if not os.path.realpath(full).startswith(os.path.realpath(OUTPUT_DIR)):
         raise HTTPException(403, "Access denied")
-    return FileResponse(full, filename=os.path.basename(full))
+
+    is_tiff = full.lower().endswith((".tif", ".tiff"))
+    if raw or not is_tiff:
+        return FileResponse(full, filename=os.path.basename(full))
+
+    try:
+        data = _colorize_tiff(full, product_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Colourised download failed: {e}")
+
+    stem, ext = os.path.splitext(os.path.basename(full))
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="image/tiff",
+        headers={"Content-Disposition": f'attachment; filename="{stem}_color{ext}"'},
+    )
 
 
 @app.get("/api/preview/{filepath:path}")
@@ -367,64 +536,8 @@ async def preview_file(
 
     # TIFF → convert to coloured PNG
     try:
-        img = Image.open(full)
-        arr = np.array(img, dtype=np.float32)
-
-        cmap_name = "grayscale"
-        if product_id and product_id in PRODUCT_CMAP:
-            cmap_name = PRODUCT_CMAP[product_id] or "grayscale"
-
-        if arr.ndim == 2 or (arr.ndim == 3 and arr.shape[2] == 1):
-            # ── single-band index (NDVI, NDWI, …) ──
-            if arr.ndim == 3:
-                arr = arr[:, :, 0]
-            valid = np.isfinite(arr)
-            if valid.any():
-                vmin, vmax = np.percentile(arr[valid], [2, 98])
-                if vmin == vmax:
-                    vmax = vmin + 1
-                normed = np.clip((arr - vmin) / (vmax - vmin), 0, 1)
-            else:
-                normed = np.zeros_like(arr)
-            idx = (normed * 255).astype(np.uint8)
-            lut = COLORMAPS.get(cmap_name, COLORMAPS["grayscale"])
-            rgba = lut[idx]
-            rgba[~valid, 3] = 0     # transparent where NaN
-            result = Image.fromarray(rgba, mode="RGBA")
-
-        elif arr.ndim == 3 and arr.shape[2] >= 2:
-            # ── multi-band (RGB, SAR VV/VH) ──
-            if arr.shape[2] == 2:
-                band = arr[:, :, 0]
-                valid = np.isfinite(band)
-                if valid.any():
-                    vmin, vmax = np.percentile(band[valid], [2, 98])
-                    if vmin == vmax:
-                        vmax = vmin + 1
-                    normed = np.clip((band - vmin) / (vmax - vmin), 0, 1)
-                else:
-                    normed = np.zeros_like(band)
-                grey = (normed * 255).astype(np.uint8)
-                rgba = np.stack([grey, grey, grey, np.full_like(grey, 200)], axis=-1)
-                result = Image.fromarray(rgba, mode="RGBA")
-            else:
-                channels = []
-                for c in range(min(arr.shape[2], 3)):
-                    ch = arr[:, :, c]
-                    valid = np.isfinite(ch)
-                    if valid.any():
-                        vmin, vmax = np.percentile(ch[valid], [2, 98])
-                        if vmin == vmax:
-                            vmax = vmin + 1
-                        ch = np.clip((ch - vmin) / (vmax - vmin) * 255, 0, 255)
-                    else:
-                        ch = np.zeros(ch.shape)
-                    channels.append(ch.astype(np.uint8))
-                alpha = np.full_like(channels[0], 200)
-                rgba = np.stack(channels + [alpha], axis=-1)
-                result = Image.fromarray(rgba, mode="RGBA")
-        else:
-            raise HTTPException(400, "Unsupported TIFF band layout")
+        rgba = _render_rgba(_read_raster(full), _cmap_for(product_id))
+        result = Image.fromarray(rgba)
 
         buf = io.BytesIO()
         result.save(buf, format="PNG")
