@@ -110,9 +110,9 @@ Or with Uvicorn directly:
 ```bash
 uvicorn app:app --reload --port 8000
 ```
-Open **`http://localhost:8000`** and sign in with the demo credentials **`admin` / `admin`**.
+Open **`http://localhost:8000`**. The app opens directly; there is no login.
 
-> **Note:** The login is a demo gate only. It is not real authentication, and `/app` and the API are reachable without it. Add proper auth before exposing the app publicly.
+> **Note:** The app and its API have no authentication. Add some before exposing it publicly.
 
 ### 6. Using the App
 1. Pick a **product**, choose a **date range**, and draw a **rectangle** on the map.
@@ -140,9 +140,8 @@ The repository is pre-configured for serverless deployment on **Vercel** via `ve
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | `GET` | Login page |
-| `/app` | `GET` | The TerraVerify web application |
-| `/api/login` | `POST` | Demo login (`{"username", "password"}`) |
+| `/` | `GET` | The TerraVerify web application |
+| `/app` | `GET` | Redirects to `/` (old address) |
 | `/api/products` | `GET` | Product catalog: mission, label, format, and the legend colour stops for each product |
 | `/api/process` | `POST` | Searches the catalog for AOI + date range and writes the scene report CSV. The response includes `measurements_available` (false if the Statistical API call failed) |
 | `/api/fetch-scene` | `POST` | Generates and saves the raster for one scene date |
@@ -192,9 +191,7 @@ sentinel-data-explorer/
 ├── scene_report.py                      # Plain-language scene report CSV (Statistical API measurements)
 ├── sentinel_data_api_example_second.py  # Core pipeline: auth, catalog search, evalscripts, Process API
 ├── static/
-│   ├── login.html                       # Login page
 │   ├── index.html                       # Main app markup and modal dialogs
-│   ├── css/login.css                    # Login page styles
 │   ├── css/style.css                    # App styles (light theme, responsive)
 │   └── js/app.js                        # Map, search flow, legend, comparison views, CSV views
 ├── requirements.txt                     # Python dependencies
