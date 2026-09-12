@@ -110,7 +110,7 @@ Or with Uvicorn directly:
 ```bash
 uvicorn app:app --reload --port 8000
 ```
-Open **`http://localhost:8000`**. The app opens directly; there is no login.
+Open **`http://localhost:8000`** for the landing page, or **`http://localhost:8000/app`** to go straight to the app. There is no login.
 
 > **Note:** The app and its API have no authentication. Add some before exposing it publicly.
 
@@ -140,8 +140,8 @@ The repository is pre-configured for serverless deployment on **Vercel** via `ve
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | `GET` | The TerraVerify web application |
-| `/app` | `GET` | Redirects to `/` (old address) |
+| `/` | `GET` | Landing page describing the platform |
+| `/app` | `GET` | The TerraVerify web application |
 | `/api/products` | `GET` | Product catalog: mission, label, format, and the legend colour stops for each product |
 | `/api/process` | `POST` | Searches the catalog for AOI + date range and writes the scene report CSV. The response includes `measurements_available` (false if the Statistical API call failed) |
 | `/api/fetch-scene` | `POST` | Generates and saves the raster for one scene date |
@@ -191,9 +191,12 @@ sentinel-data-explorer/
 ├── scene_report.py                      # Plain-language scene report CSV (Statistical API measurements)
 ├── sentinel_data_api_example_second.py  # Core pipeline: auth, catalog search, evalscripts, Process API
 ├── static/
-│   ├── index.html                       # Main app markup and modal dialogs
+│   ├── landing.html                     # Public landing page (served at /)
+│   ├── index.html                       # Main app markup and modal dialogs (served at /app)
 │   ├── css/style.css                    # App styles (light theme, responsive)
-│   └── js/app.js                        # Map, search flow, legend, comparison views, CSV views
+│   ├── css/landing.css                  # Landing page styles
+│   ├── js/app.js                        # Map, search flow, legend, comparison views, CSV views
+│   └── js/landing.js                    # Landing page hero swipe preview and mobile menu
 ├── requirements.txt                     # Python dependencies
 ├── vercel.json                          # Vercel serverless deployment config
 ├── .env.example                         # Environment variables template

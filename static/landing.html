@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TerraVerify — Satellite Verification &amp; Carbon Footprint Platform</title>
+    <meta name="description" content="TerraVerify turns Copernicus satellite data and Climate TRACE emissions into plain-language reports. Draw an area, pick a product, and see what the satellite saw — vegetation, water, radar, air quality and carbon footprint.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/landing.css">
+</head>
+<body>
+
+    <!-- ── Hero ─────────────────────────────────────────────────── -->
+    <header class="hero">
+        <nav class="nav" aria-label="Main">
+            <div class="container nav-inner">
+                <a href="/" class="brand" aria-label="TerraVerify home">TerraVerify</a>
+                <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Menu">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                </button>
+                <div class="nav-links" id="nav-links">
+                    <a href="#features">Features</a>
+                    <a href="#how">How it works</a>
+                    <a href="#products">Data products</a>
+                    <a href="#carbon">Carbon footprint</a>
+                    <a href="/app" class="btn btn-primary btn-sm">Launch app</a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container hero-inner">
+            <div class="hero-copy">
+                <span class="eyebrow">
+                    <span class="pulse" aria-hidden="true"></span>
+                    Copernicus · Climate TRACE
+                </span>
+                <h1>See what the satellite saw.<br><span class="grad">In plain language.</span></h1>
+                <p class="lede">
+                    TerraVerify is a satellite verification platform. Draw an area on the map, pick a product,
+                    and get a readable report of every date the satellites captured it — vegetation,
+                    water, built-up land, radar, air quality — plus the carbon footprint of the district around it.
+                </p>
+                <div class="hero-ctas">
+                    <a href="/app" class="btn btn-primary btn-lg">
+                        Launch TerraVerify
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                    </a>
+                    <a href="#how" class="btn btn-ghost btn-lg">How it works</a>
+                </div>
+                <ul class="hero-points">
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>No GIS skills needed</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>CSV &amp; GeoTIFF exports</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Opens straight to the map</li>
+                </ul>
+            </div>
+
+            <!-- Interactive swipe preview: true colour vs NDVI of the same scene -->
+            <div class="hero-visual">
+                <div class="scene-window">
+                    <div class="scene-bar">
+                        <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                        <span class="scene-bar-title">Swipe compare · Optical imagery</span>
+                    </div>
+                    <div class="scene" id="scene" style="--split: 50%">
+                        <svg class="scene-layer" id="layer-tc" viewBox="0 0 560 380" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+                        <svg class="scene-layer scene-layer-ndvi" id="layer-ndvi" viewBox="0 0 560 380" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+                        <svg class="scene-layer scene-aoi" viewBox="0 0 560 380" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                            <rect x="150" y="78" width="270" height="214" rx="3" fill="rgba(37,99,235,.10)" stroke="#fff" stroke-width="2" stroke-dasharray="7 5"/>
+                            <g fill="#fff" stroke="#2563eb" stroke-width="2">
+                                <rect x="145" y="73" width="10" height="10" rx="2"/><rect x="415" y="73" width="10" height="10" rx="2"/>
+                                <rect x="145" y="287" width="10" height="10" rx="2"/><rect x="415" y="287" width="10" height="10" rx="2"/>
+                            </g>
+                        </svg>
+                        <span class="scene-tag scene-tag-left">True color</span>
+                        <span class="scene-tag scene-tag-right">NDVI</span>
+                        <div class="split-line" aria-hidden="true"><span class="split-handle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l-6 6 6 6M15 6l6 6-6 6"/></svg>
+                        </span></div>
+                        <input type="range" id="scene-slider" class="scene-slider" min="0" max="100" value="50" aria-label="Swipe between true color and NDVI">
+                    </div>
+                </div>
+
+                <div class="float-card report-card">
+                    <div class="report-head">
+                        <span class="mono">Scene report · 12 Aug · S2B</span>
+                        <span class="pill pill-good">Good</span>
+                    </div>
+                    <p>“Vegetation is moderate on average: 41% of the visible land is dense, healthy vegetation. Clouds hid 6% of your area.”</p>
+                </div>
+
+                <div class="float-card legend-card">
+                    <div class="legend-title">NDVI · vegetation health</div>
+                    <div class="legend-bar legend-vegetation"></div>
+                    <div class="legend-ticks"><span>−1</span><span>0</span><span>1</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <dl class="stats">
+                <div><dt>4</dt><dd>Satellite missions</dd></div>
+                <div><dt>15</dt><dd>Data products</dd></div>
+                <div><dt>10</dt><dd>Emission categories</dd></div>
+                <div><dt>24</dt><dd>Months of air-quality trends</dd></div>
+            </dl>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- ── Two tools ────────────────────────────────────────── -->
+        <section class="section" id="features">
+            <div class="container">
+                <div class="section-head">
+                    <span class="kicker">Two tools, one map</span>
+                    <h2>From raw satellite passes to answers you can act on</h2>
+                    <p>TerraVerify wraps the Copernicus Data Space and Climate TRACE APIs in a guided interface, so anyone can check what changed on the ground — and what it emits.</p>
+                </div>
+
+                <div class="tool-grid">
+                    <article class="tool-card">
+                        <div class="tool-icon tool-icon-blue" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                        </div>
+                        <h3>Satellite scenes</h3>
+                        <p>Search the satellite catalog for any rectangle and date range. Every acquisition is summarised in a plain-English scene report, and any scene can be rendered on demand.</p>
+                        <ul class="check-list">
+                            <li>Guided three-step search with date presets and AOI area in km²</li>
+                            <li>Cloud cover colour-coded so usable scenes stand out</li>
+                            <li>Fetched rasters overlaid on the map with a real-value legend</li>
+                            <li>Side-by-side, swipe, grid and metadata comparison</li>
+                            <li>Merge past runs into one chronological table</li>
+                        </ul>
+                    </article>
+
+                    <article class="tool-card">
+                        <div class="tool-icon tool-icon-green" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>
+                        </div>
+                        <h3>Carbon footprint</h3>
+                        <p>Search a district by name or draw an area. TerraVerify finds the district by real boundary overlap and builds its greenhouse-gas footprint from Climate TRACE.</p>
+                        <ul class="check-list">
+                            <li>Yearly CO₂-equivalent totals and year-on-year change</li>
+                            <li>Breakdown by sector in plain categories</li>
+                            <li>Named facilities — power stations, landfills, airports</li>
+                            <li>Satellite NO₂, CH₄ and CO: last 12 months vs the 12 before</li>
+                            <li>Is your area higher or lower than its district?</li>
+                        </ul>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── How it works ─────────────────────────────────────── -->
+        <section class="section section-tint" id="how">
+            <div class="container">
+                <div class="section-head">
+                    <span class="kicker">How it works</span>
+                    <h2>Three steps. No satellite expertise.</h2>
+                </div>
+                <ol class="steps">
+                    <li class="step">
+                        <span class="step-num">1</span>
+                        <h3>Pick a product</h3>
+                        <p>Choose from 15 optical, radar, thermal and air-quality products — each labelled with what it actually shows.</p>
+                    </li>
+                    <li class="step">
+                        <span class="step-num">2</span>
+                        <h3>Draw your area</h3>
+                        <p>Set a date range with one click and draw a rectangle on the map. The sidebar tells you what's still missing.</p>
+                    </li>
+                    <li class="step">
+                        <span class="step-num">3</span>
+                        <h3>Read, fetch, compare</h3>
+                        <p>Get a scene list and report CSV, fetch the rasters you need, and compare dates side by side to spot change.</p>
+                    </li>
+                </ol>
+            </div>
+        </section>
+
+        <!-- ── Data products ────────────────────────────────────── -->
+        <section class="section" id="products">
+            <div class="container">
+                <div class="section-head">
+                    <span class="kicker">Data products</span>
+                    <h2>15 products across 4 satellite missions</h2>
+                    <p>Measured over your area by statistical analysis and rendered with consistent, legend-backed colour scales.</p>
+                </div>
+
+                <div class="mission-grid">
+                    <article class="mission">
+                        <div class="mission-swatch legend-vegetation" aria-hidden="true"></div>
+                        <div class="mission-body">
+                            <div class="mission-sat">Multispectral</div>
+                            <h3>Optical imagery</h3>
+                            <p>Up to 10 m imagery with cloud and shadow masking, so a cloudy day never reads as “no vegetation”.</p>
+                            <ul class="chips">
+                                <li>True Color</li><li>NDVI</li><li>NDWI</li><li>NDBI</li><li>NDSI</li><li>EVI</li>
+                            </ul>
+                        </div>
+                    </article>
+                    <article class="mission">
+                        <div class="mission-swatch legend-grayscale" aria-hidden="true"></div>
+                        <div class="mission-body">
+                            <div class="mission-sat">Microwave</div>
+                            <h3>Radar (SAR)</h3>
+                            <p>Sees through clouds, day and night. Detects likely water and flooding, and strong reflectors like buildings.</p>
+                            <ul class="chips">
+                                <li>VV/VH backscatter</li>
+                            </ul>
+                        </div>
+                    </article>
+                    <article class="mission">
+                        <div class="mission-swatch legend-water" aria-hidden="true"></div>
+                        <div class="mission-body">
+                            <div class="mission-sat">Wide-swath</div>
+                            <h3>Ocean &amp; land</h3>
+                            <p>Wide-area colour imagery and thermal infrared for approximate surface temperature, coolest and hottest spots.</p>
+                            <ul class="chips">
+                                <li>OLCI True Color</li><li>SLSTR thermal</li>
+                            </ul>
+                        </div>
+                    </article>
+                    <article class="mission">
+                        <div class="mission-swatch legend-thermal" aria-hidden="true"></div>
+                        <div class="mission-body">
+                            <div class="mission-sat">Atmospheric</div>
+                            <h3>Air quality</h3>
+                            <p>Quality-filtered trace gases in familiar units, with indicative levels and where each gas comes from.</p>
+                            <ul class="chips">
+                                <li>NO₂</li><li>CO</li><li>CH₄</li><li>O₃</li><li>SO₂</li><li>Aerosol</li>
+                            </ul>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Plain-language reports ───────────────────────────── -->
+        <section class="section section-tint">
+            <div class="container split">
+                <div class="split-copy">
+                    <span class="kicker">Plain-language reports</span>
+                    <h2>One row per date. One sentence that explains it.</h2>
+                    <p>Every search writes a scene report CSV built for non-specialists: readable column names, real units, a data-quality grade and a summary sentence — with technical details kept at the end.</p>
+                    <ul class="check-list">
+                        <li>Share of <em>your</em> area the satellite could actually see</li>
+                        <li>Good / Fair / Poor quality grade per date</li>
+                        <li>Product-specific measurements — % dense vegetation, open-water km², gas levels</li>
+                        <li>UTF-8 with BOM, so Excel shows °C, km² and µ correctly</li>
+                    </ul>
+                </div>
+                <div class="table-card" role="img" aria-label="Example rows from a scene report CSV">
+                    <div class="table-card-head">
+                        <span class="mono">scene_report.csv</span>
+                        <span class="table-card-note">Example</span>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="mini-table">
+                            <thead>
+                                <tr><th>Date</th><th>Visible</th><th>Quality</th><th>Summary</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td class="mono">2026-08-27</td><td class="mono">97%</td><td><span class="pill pill-good">Good</span></td><td>Vegetation is healthy: 48% dense vegetation.</td></tr>
+                                <tr><td class="mono">2026-08-22</td><td class="mono">58%</td><td><span class="pill pill-fair">Fair</span></td><td>Vegetation is moderate. Clouds hid 42% of your area.</td></tr>
+                                <tr><td class="mono">2026-08-17</td><td class="mono">3%</td><td><span class="pill pill-none">None</span></td><td>Too cloudy to measure.</td></tr>
+                                <tr><td class="mono">2026-08-12</td><td class="mono">94%</td><td><span class="pill pill-good">Good</span></td><td>Vegetation is moderate: 41% dense vegetation.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Compare & export ─────────────────────────────────── -->
+        <section class="section">
+            <div class="container">
+                <div class="section-head">
+                    <span class="kicker">Compare &amp; export</span>
+                    <h2>Spot the change. Take the data with you.</h2>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature">
+                        <div class="feature-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg></div>
+                        <h3>Side-by-side</h3>
+                        <p>Two synced maps with scene pickers — pan one, both follow.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 4v16M9 12l-2 0M15 12h2"/></svg></div>
+                        <h3>Swipe</h3>
+                        <p>Drag a curtain across two dates for instant visual change detection.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+                        <h3>Grid</h3>
+                        <p>Up to four synced maps at once to follow a place through time.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18"/></svg></div>
+                        <h3>Metadata matrix</h3>
+                        <p>Scene details plus each date's measurements from the report, in one table.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>
+                        <h3>GIS-ready GeoTIFF</h3>
+                        <p>Coloured to match the preview, or raw 32-bit float values — lines up in QGIS and ArcGIS.</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg></div>
+                        <h3>Past runs</h3>
+                        <p>Merge CSVs from earlier searches — including older report formats — into one timeline.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Carbon footprint detail ──────────────────────────── -->
+        <section class="section section-dark" id="carbon">
+            <div class="container split">
+                <div class="split-copy">
+                    <span class="kicker kicker-light">Carbon footprint</span>
+                    <h2>What does this district emit&nbsp;— and is the air changing?</h2>
+                    <p>Emissions come from Climate TRACE, grouped into ten plain categories from power and industry to farming and waste. Satellite air-quality indicators show where burning and methane sources leave a mark.</p>
+                    <ul class="check-list check-list-light">
+                        <li>Emissions only — land carbon-balance fluxes are excluded, so year-on-year changes stay honest</li>
+                        <li>Changes within sampling noise read as “about the same”</li>
+                        <li>Emissions and facilities CSVs, ready for your own analysis</li>
+                    </ul>
+                    <a href="/app" class="btn btn-primary">Generate a carbon report</a>
+                </div>
+
+                <div class="sector-card" role="img" aria-label="Illustration of a sector breakdown chart">
+                    <div class="sector-head">
+                        <span>By sector</span>
+                        <span class="table-card-note">Illustrative</span>
+                    </div>
+                    <ul class="sector-bars">
+                        <li><span>Power &amp; heat</span><i style="--w: 92%"></i></li>
+                        <li><span>Industry</span><i style="--w: 71%"></i></li>
+                        <li><span>Road transport</span><i style="--w: 48%"></i></li>
+                        <li><span>Agriculture &amp; livestock</span><i style="--w: 36%"></i></li>
+                        <li><span>Homes &amp; buildings</span><i style="--w: 27%"></i></li>
+                        <li><span>Waste</span><i style="--w: 18%"></i></li>
+                    </ul>
+                    <div class="gas-row">
+                        <div class="gas"><span class="gas-name">NO₂</span><span class="gas-trend up">▲ Higher</span></div>
+                        <div class="gas"><span class="gas-name">CH₄</span><span class="gas-trend same">● Same</span></div>
+                        <div class="gas"><span class="gas-name">CO</span><span class="gas-trend down">▼ Lower</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Data sources ─────────────────────────────────────── -->
+        <section class="section section-sources">
+            <div class="container">
+                <p class="sources-title">Built on open, trusted data</p>
+                <ul class="sources">
+                    <li><strong>Copernicus Data Space</strong><span>Earth-observation satellite data</span></li>
+                    <li><strong>Climate TRACE</strong><span>Emissions by district &amp; facility</span></li>
+                    <li><strong>OpenStreetMap</strong><span>Base map tiles</span></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ── CTA ──────────────────────────────────────────────── -->
+        <section class="section cta-section">
+            <div class="container">
+                <div class="cta">
+                    <h2>Draw an area. See the evidence.</h2>
+                    <p>TerraVerify opens straight to the map — no sign-up, no setup.</p>
+                    <a href="/app" class="btn btn-primary btn-lg">
+                        Launch TerraVerify
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ── Footer ───────────────────────────────────────────────── -->
+    <footer class="footer">
+        <div class="container footer-inner">
+            <!-- Developer: BluMargins Technologies -->
+            <div class="footer-company">
+                <a href="https://www.blumargins.com/" class="bm-brand" target="_blank" rel="noopener" aria-label="BluMargins Technologies">
+                    <span class="bm-mark" aria-hidden="true"></span>
+                    <span class="bm-wordmark">Blu<b>Margins</b></span>
+                </a>
+                <p class="bm-desc">BluMargins builds AI and machine learning systems, enterprise software products, data platforms, cloud infrastructure, and digital control systems, delivered end to end.</p>
+                <ul class="bm-contact">
+                    <li>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                        <address><b>BluMargins Technologies</b><br>Red Cross Road<br>Srinagar, Kashmir - 190001, India</address>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+                        <a href="mailto:info@blumargins.com">info@blumargins.com</a>
+                    </li>
+                </ul>
+                <ul class="bm-social" aria-label="Social">
+                    <li><a href="https://www.linkedin.com/company/blumargins" target="_blank" rel="noopener" aria-label="BluMargins on LinkedIn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M6.5 8.5h-3V21h3V8.5ZM5 3.5A1.75 1.75 0 1 0 5 7a1.75 1.75 0 0 0 0-3.5ZM21 13.4c0-3.4-1.8-5.2-4.5-5.2-1.6 0-2.8.8-3.4 1.8V8.5h-3V21h3v-6.6c0-1.7.7-2.7 2.2-2.7 1.4 0 2 1 2 2.7V21h3v-7.6Z"/></svg>
+                    </a></li>
+                </ul>
+            </div>
+
+            <nav class="footer-links" aria-label="Footer">
+                <h4>TerraVerify</h4>
+                <a href="/app">Launch app</a>
+                <a href="#features">Features</a>
+                <a href="#how">How it works</a>
+                <a href="#products">Data products</a>
+                <a href="#carbon">Carbon footprint</a>
+            </nav>
+        </div>
+        <div class="container footer-bottom">
+            <p class="credits">Contains modified Copernicus Sentinel data. Emissions data: Climate TRACE (climatetrace.org). Map tiles © OpenStreetMap contributors.</p>
+            <p class="developed">Developed by <a href="https://www.blumargins.com/" target="_blank" rel="noopener">BluMargins Technologies</a></p>
+        </div>
+    </footer>
+
+    <script src="/static/js/landing.js"></script>
+</body>
+</html>

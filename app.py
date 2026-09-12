@@ -17,7 +17,7 @@ except ImportError:      # optional, Pillow fallback below
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -264,14 +264,14 @@ class ProcessRequest(BaseModel):
 # ─── Routes ──────────────────────────────────────────────────────────
 
 @app.get("/")
-async def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+async def landing():
+    """Public landing page describing the platform."""
+    return FileResponse(os.path.join(STATIC_DIR, "landing.html"))
 
 
 @app.get("/app")
-async def legacy_app_url():
-    """The app used to live at /app behind a login page; keep old links working."""
-    return RedirectResponse("/", status_code=301)
+async def index():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 
 @app.get("/api/products")
