@@ -173,33 +173,6 @@ body {
     opacity: 0;
 }
 
-/* ── Logo ────────────────────────────────────────────────────────── */
-.login-logo {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 24px;
-}
-
-.logo-ring {
-    width: 72px;
-    height: 72px;
-    border-radius: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
-    color: #fff;
-    box-shadow:
-        0 0 0 1px rgba(37, 99, 235, 0.15),
-        0 8px 32px rgba(37, 99, 235, 0.2);
-    animation: pulse-ring 3s ease-in-out infinite;
-}
-
-@keyframes pulse-ring {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15), 0 8px 32px rgba(37, 99, 235, 0.2); }
-    50% { box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2), 0 12px 48px rgba(37, 99, 235, 0.3); }
-}
-
 /* ── Title ───────────────────────────────────────────────────────── */
 .login-title {
     text-align: center;
