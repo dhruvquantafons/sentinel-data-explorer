@@ -34,6 +34,11 @@ from sentinel_data_api_example_second import (
     OUTPUT_DIR,
 )
 from scene_report import build_report, write_report_csv, catalog_filter_for, matches_product
+import requests
+import air_indicators
+import carbon_report
+import climate_trace as ct_client
+from climate_trace import ClimateTraceError, ClimateTraceNotFound
 
 # ─── App setup ───────────────────────────────────────────────────────
 
@@ -430,6 +435,114 @@ async def fetch_scene(req: FetchSceneRequest):
         "bbox": req.bbox,
         "product_id": req.product_id,
     })
+
+
+# ─── Carbon footprint (Climate TRACE) ────────────────────────────────
+
+class CarbonReportRequest(BaseModel):
+    bbox: Optional[List[float]] = None    # [west, south, east, north]; finds the district(s)
+    district_id: Optional[str] = None     # GADM id, e.g. "IND.11.1_1"; overrides bbox
+    year: Optional[int] = None            # defaults to the latest full year
+
+
+@app.get("/api/carbon/districts")
+async def carbon_district_search(name: str = Query(..., min_length=2)):
+    """District suggestions for the search box (GADM spellings, e.g. "Ahmadabad")."""
+    try:
+        return JSONResponse(carbon_report.search_districts(name))
+    except ClimateTraceError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.post("/api/carbon-report")
+def carbon_footprint_report(req: CarbonReportRequest):
+    """
+    Carbon footprint of the district covering a drawn rectangle (or of a
+    district picked by id): yearly totals, sector breakdown, summary and a
+    readable CSV. Sync handler: FastAPI runs it in a worker thread, so the
+    blocking Climate TRACE calls don't stall other requests.
+    """
+    if not req.bbox and not req.district_id:
+        raise HTTPException(400, "Provide a bbox or a district_id")
+    if req.bbox and len(req.bbox) != 4:
+        raise HTTPException(400, "bbox must have exactly 4 values [west, south, east, north]")
+
+    try:
+        districts = carbon_report.districts_for_bbox(req.bbox) if req.bbox else []
+        district_id = req.district_id or (districts[0]["id"] if districts else None)
+        if not district_id:
+            raise HTTPException(404, "No district with emissions data covers this area. "
+                                     "Try drawing over land, or search for a district by name.")
+        report = carbon_report.build_footprint(district_id, req.year)
+        csv_path = carbon_report.write_footprint_csv(report, OUTPUT_DIR)
+
+        # Named facilities: inside the rectangle (across every district it
+        # touches), or the whole district when it was picked by id
+        area = districts if req.bbox else [report["district"]]
+        facilities = carbon_report.build_facilities(
+            area, req.bbox, report["year"], report["district"]["id"], report["tonnes"])
+        facilities_csv = carbon_report.write_facilities_csv(facilities, csv_path)
+    except ClimateTraceNotFound:
+        raise HTTPException(404, f"District not found: {district_id}")
+    except LookupError as e:                 # district exists but has no data
+        raise HTTPException(404, str(e))
+    except ClimateTraceError as e:
+        raise HTTPException(502, str(e))
+
+    report.pop("_yearly", None)
+    facilities.pop("_all", None)
+    # District outline for the map (~100 m precision keeps it small)
+    report["boundary"] = air_indicators.simplify_geometries(
+        ct_client.admin_geometries(report["district"]["id"]), digits=3)
+    report["area_districts"] = districts
+    report["facilities"] = facilities
+    report["csv_path"] = os.path.relpath(csv_path, OUTPUT_DIR)
+    report["facilities_csv_path"] = os.path.relpath(facilities_csv, OUTPUT_DIR)
+    return JSONResponse(report)
+
+
+class CarbonIndicatorsRequest(BaseModel):
+    bbox: Optional[List[float]] = None    # measure over this rectangle…
+    district_id: Optional[str] = None     # …or this district; with both, compare them
+
+
+@app.post("/api/carbon-indicators")
+def carbon_air_indicators(req: CarbonIndicatorsRequest):
+    """
+    NO₂ / CH₄ / CO over the last 12 months vs the 12 before (Sentinel-5P).
+
+    - bbox only: measured over the rectangle
+    - district_id only: measured over the district boundary
+    - both: measured over the rectangle and compared with the district
+      ("hotspot-lite": is the drawn area higher or lower than its district?)
+
+    Separate from /api/carbon-report because it takes ~10–35 s: the report
+    renders first and this fills in the air card afterwards.
+    """
+    if not req.bbox and not req.district_id:
+        raise HTTPException(400, "Provide a bbox or a district_id")
+    if req.bbox and len(req.bbox) != 4:
+        raise HTTPException(400, "bbox must have exactly 4 values [west, south, east, north]")
+
+    try:
+        district_bounds = district_name = None
+        if req.district_id:
+            district_name = ct_client.get_admin(req.district_id).get("Name") or req.district_id
+            district_bounds = air_indicators.bounds_for_geometries(
+                ct_client.admin_geometries(req.district_id))
+        token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+        if req.bbox:
+            result = air_indicators.build_indicators(
+                token, {"bbox": req.bbox}, "your area", district_bounds, district_name)
+        else:
+            result = air_indicators.build_indicators(token, district_bounds, district_name)
+        return JSONResponse(result)
+    except ClimateTraceNotFound:
+        raise HTTPException(404, f"District not found: {req.district_id}")
+    except ClimateTraceError as e:
+        raise HTTPException(502, str(e))
+    except requests.RequestException as e:
+        raise HTTPException(502, f"Air indicators unavailable: {e}")
 
 
 # Run-folder mission prefix → display name. build_run_paths() writes the

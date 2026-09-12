@@ -445,6 +445,37 @@ def _gas_spec(band, s5p_type, name, unit, factor, digits, levels, about):
 
 DOBSON = 1 / 4.4615e-4      # mol/m² → Dobson units
 
+# Sentinel-5P gases: band, catalog type, display name, unit, factor from the
+# band's native unit, decimals, indicative levels, and where the gas comes
+# from. Shared with the carbon report's air indicators.
+GASES = {
+    "NO2": dict(band="NO2", s5p_type="NO2", name="nitrogen dioxide (NO₂)", unit="µmol/m²",
+                factor=1e6, digits=1,
+                levels=[(150, "Very high"), (80, "High"), (40, "Moderate"), (NEG_INF, "Low")],
+                about="NO₂ mainly comes from traffic, power plants and industry."),
+    "CH4": dict(band="CH4", s5p_type="CH4", name="methane (CH₄)", unit="ppb",
+                factor=1, digits=0,
+                levels=[(2020, "High"), (1960, "Elevated"), (1900, "Typical"), (NEG_INF, "Below typical")],
+                about="Methane comes from farming, landfills, wetlands and gas leaks."),
+    "CO": dict(band="CO", s5p_type="CO", name="carbon monoxide (CO)", unit="mmol/m²",
+               factor=1e3, digits=1,
+               levels=[(55, "High"), (40, "Elevated"), (NEG_INF, "Normal")],
+               about="CO comes from fires, traffic and burning fuel."),
+    "O3": dict(band="O3", s5p_type="O3", name="total ozone (O₃)", unit="Dobson units",
+               factor=DOBSON, digits=0,
+               levels=[(340, "Above normal"), (260, "Normal"), (220, "Below normal"),
+                       (NEG_INF, "Very low (ozone-hole level)")],
+               about="Most of this ozone is in the protective ozone layer high above the ground."),
+    "SO2": dict(band="SO2", s5p_type="SO2", name="sulfur dioxide (SO₂)", unit="Dobson units",
+                factor=DOBSON, digits=2,
+                levels=[(2, "High (industrial or volcanic)"), (0.5, "Elevated"), (NEG_INF, "Background")],
+                about="SO₂ comes from burning coal and oil, smelters and volcanoes."),
+    "AER_AI": dict(band="AER_AI_340_380", s5p_type="AER_AI", name="aerosol index (smoke/dust)", unit="",
+                   factor=1, digits=2,
+                   levels=[(3, "Heavy smoke or dust"), (1.5, "Hazy"), (0.5, "Light haze"), (NEG_INF, "Clean air")],
+                   about="Higher values mean more smoke, dust or ash in the air."),
+}
+
 PRODUCT_SPECS = {
     "1": TRUE_COLOR,
     "2": NDVI,
@@ -456,25 +487,12 @@ PRODUCT_SPECS = {
     # "8" OLCI true colour: a photo with no reliable per-pixel cloud mask here,
     # so it gets the plain scene columns only.
     "9": THERMAL,
-    "10": _gas_spec("NO2", "NO2", "nitrogen dioxide (NO₂)", "µmol/m²", 1e6, 1,
-                    [(150, "Very high"), (80, "High"), (40, "Moderate"), (NEG_INF, "Low")],
-                    "NO₂ mainly comes from traffic, power plants and industry."),
-    "11": _gas_spec("CH4", "CH4", "methane (CH₄)", "ppb", 1, 0,
-                    [(2020, "High"), (1960, "Elevated"), (1900, "Typical"), (NEG_INF, "Below typical")],
-                    "Methane comes from farming, landfills, wetlands and gas leaks."),
-    "12": _gas_spec("CO", "CO", "carbon monoxide (CO)", "mmol/m²", 1e3, 1,
-                    [(55, "High"), (40, "Elevated"), (NEG_INF, "Normal")],
-                    "CO comes from fires, traffic and burning fuel."),
-    "13": _gas_spec("O3", "O3", "total ozone (O₃)", "Dobson units", DOBSON, 0,
-                    [(340, "Above normal"), (260, "Normal"), (220, "Below normal"),
-                     (NEG_INF, "Very low (ozone-hole level)")],
-                    "Most of this ozone is in the protective ozone layer high above the ground."),
-    "14": _gas_spec("SO2", "SO2", "sulfur dioxide (SO₂)", "Dobson units", DOBSON, 2,
-                    [(2, "High (industrial or volcanic)"), (0.5, "Elevated"), (NEG_INF, "Background")],
-                    "SO₂ comes from burning coal and oil, smelters and volcanoes."),
-    "15": _gas_spec("AER_AI_340_380", "AER_AI", "aerosol index (smoke/dust)", "", 1, 2,
-                    [(3, "Heavy smoke or dust"), (1.5, "Hazy"), (0.5, "Light haze"), (NEG_INF, "Clean air")],
-                    "Higher values mean more smoke, dust or ash in the air."),
+    "10": _gas_spec(**GASES["NO2"]),
+    "11": _gas_spec(**GASES["CH4"]),
+    "12": _gas_spec(**GASES["CO"]),
+    "13": _gas_spec(**GASES["O3"]),
+    "14": _gas_spec(**GASES["SO2"]),
+    "15": _gas_spec(**GASES["AER_AI"]),
 }
 
 
