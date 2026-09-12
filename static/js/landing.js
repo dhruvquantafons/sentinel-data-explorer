@@ -1,6 +1,23 @@
 /* TerraVerify landing page: hero swipe preview + mobile menu */
 
 (function () {
+    // Google Fonts swap in asynchronously and reflow the hero's large
+    // heading; if the page loaded on a link like "#products", that reflow
+    // can shift everything below it after the browser already jumped to
+    // the target, leaving the section scrolled a few hundred pixels off.
+    // Re-settle once fonts are in — or after a short fallback delay, so a
+    // slow or blocked font request can't leave the page stuck mid-scroll.
+    if (location.hash) {
+        const settle = () => {
+            const target = document.querySelector(location.hash);
+            // Explicit "auto": html{scroll-behavior:smooth} would otherwise
+            // animate this, which is jarring on a page's very first paint.
+            if (target) target.scrollIntoView({ block: "start", behavior: "auto" });
+        };
+        const fontsReady = (document.fonts && document.fonts.ready) || Promise.resolve();
+        Promise.race([fontsReady, new Promise((r) => setTimeout(r, 400))]).then(settle);
+    }
+
     const SVG_NS = "http://www.w3.org/2000/svg";
 
     // Land cover → [true colour, NDVI colour (app's "vegetation" colormap)]
@@ -103,15 +120,104 @@
     const toggle = document.getElementById("nav-toggle");
     const links = document.getElementById("nav-links");
     if (toggle && links) {
+        const closeMenu = () => {
+            links.classList.remove("open");
+            toggle.setAttribute("aria-expanded", "false");
+        };
         toggle.addEventListener("click", () => {
             const open = links.classList.toggle("open");
             toggle.setAttribute("aria-expanded", String(open));
         });
         links.addEventListener("click", (e) => {
-            if (e.target.closest("a")) {
-                links.classList.remove("open");
-                toggle.setAttribute("aria-expanded", "false");
+            if (e.target.closest("a")) closeMenu();
+        });
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && links.classList.contains("open")) closeMenu();
+        });
+        document.addEventListener("click", (e) => {
+            if (links.classList.contains("open") && !links.contains(e.target) && e.target !== toggle && !toggle.contains(e.target)) {
+                closeMenu();
             }
         });
+    }
+
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // Sticky nav: elevate once the page has scrolled past the hero top
+    const nav = document.querySelector(".nav");
+    if (nav) {
+        const setScrolled = () => nav.classList.toggle("scrolled", window.scrollY > 8);
+        setScrolled();
+        window.addEventListener("scroll", setScrolled, { passive: true });
+    }
+
+    // Scrollspy: highlight the nav link for the section in view
+    const navAnchors = Array.from(document.querySelectorAll('.nav-links a[href^="#"]'));
+    const spySections = navAnchors
+        .map((a) => document.getElementById(a.getAttribute("href").slice(1)))
+        .filter(Boolean);
+    if (navAnchors.length && spySections.length && "IntersectionObserver" in window) {
+        const byId = new Map(navAnchors.map((a) => [a.getAttribute("href").slice(1), a]));
+        const spy = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    const link = byId.get(entry.target.id);
+                    if (!link) return;
+                    link.classList.toggle("active", entry.isIntersecting);
+                });
+            },
+            { rootMargin: "-40% 0px -55% 0px", threshold: 0 }
+        );
+        spySections.forEach((s) => spy.observe(s));
+    }
+
+    // Scroll-reveal for section headers and cards, gated behind JS support
+    // so nothing is ever stuck invisible if this script fails to run.
+    const revealEls = Array.from(document.querySelectorAll(".reveal"));
+    if (revealEls.length && "IntersectionObserver" in window && !reduceMotion) {
+        document.documentElement.classList.add("js-reveal");
+        const revealer = new IntersectionObserver(
+            (entries, obs) => {
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) return;
+                    entry.target.classList.add("in");
+                    obs.unobserve(entry.target);
+                });
+            },
+            { threshold: 0.14, rootMargin: "0px 0px -8% 0px" }
+        );
+        revealEls.forEach((el) => revealer.observe(el));
+    }
+
+    // Count up the hero stat numbers once they scroll into view
+    const statNums = Array.from(document.querySelectorAll(".stats dt"));
+    if (statNums.length && !reduceMotion) {
+        const animate = (el) => {
+            const target = parseInt(el.textContent, 10);
+            if (!Number.isFinite(target)) return;
+            const duration = 900;
+            const start = performance.now();
+            const ease = (t) => 1 - Math.pow(1 - t, 3);
+            const step = (now) => {
+                const t = Math.min(1, (now - start) / duration);
+                el.textContent = String(Math.round(target * ease(t)));
+                if (t < 1) requestAnimationFrame(step);
+                else el.textContent = String(target);
+            };
+            requestAnimationFrame(step);
+        };
+        if ("IntersectionObserver" in window) {
+            const counter = new IntersectionObserver(
+                (entries, obs) => {
+                    entries.forEach((entry) => {
+                        if (!entry.isIntersecting) return;
+                        animate(entry.target);
+                        obs.unobserve(entry.target);
+                    });
+                },
+                { threshold: 0.6 }
+            );
+            statNums.forEach((el) => counter.observe(el));
+        }
     }
 })();
