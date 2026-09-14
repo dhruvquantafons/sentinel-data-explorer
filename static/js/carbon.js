@@ -1,5 +1,5 @@
 /* ================================================================
-   TerraVerify — Carbon footprint mode
+   BluVerify — Carbon footprint mode
 
    Uses app.js globals: map, drawnItems, currentBbox, escapeHtml,
    scrubSentinel, showToast, bboxAreaKm2, bboxBounds, setButtonLoading.
