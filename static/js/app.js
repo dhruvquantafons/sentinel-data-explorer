@@ -20,6 +20,8 @@ let leftOverlay = null, rightOverlay = null, splitOverlayLeft = null, splitOverl
 let isSyncingMaps = false;
 
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+// Required by the OpenStreetMap tile licence (ODbL) on every map that shows OSM tiles
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const DEFAULT_OPACITY = 0.85;
 
 // Style for the drawn AOI rectangle. Its fill is dropped while a raster
@@ -66,13 +68,10 @@ function initMap() {
         zoom: 6,
         zoomControl: true,
     });
+    map.attributionControl.setPrefix(false);   // drop the "Leaflet" link, keep the OSM credit
 
     // OpenStreetMap tiles (free, no API key)
-    L.tileLayer(TILE_URL, {
-        attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-    }).addTo(map);
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
 
     // Feature group that holds drawn rectangles
     drawnItems = new L.FeatureGroup();
@@ -1222,8 +1221,9 @@ function switchFetchedCompareTab(tabName, sceneAOverride, sceneBOverride) {
  */
 function makeCompareMap(elementId, center) {
     const m = L.map(elementId, { center, zoom: 10, zoomControl: false });
+    m.attributionControl.setPrefix(false);
     L.control.zoom({ position: "bottomright" }).addTo(m);
-    L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(m);
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(m);
     return m;
 }
 
