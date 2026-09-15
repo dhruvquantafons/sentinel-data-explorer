@@ -18,7 +18,8 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div id="app">
+    <!-- The map stays hidden until the user chooses an area (or there is a result to show on it) -->
+    <div id="app" class="map-hidden">
 
         <!-- ── Sidebar ─────────────────────────────────── -->
         <aside id="sidebar" class="sidebar">
@@ -82,15 +83,7 @@
                     <div class="form-label">
                         <span class="step-num">3</span> Area of Interest
                     </div>
-                    <div id="bbox-display" class="bbox-display">
-                        <p class="bbox-hint">
-                            Use the
-                            <span class="inline-icon" aria-hidden="true">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(37,99,235,0.15)" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="4 3"/></svg>
-                            </span>
-                            rectangle tool on the map to draw your area
-                        </p>
-                    </div>
+                    <div id="bbox-display" class="bbox-display"></div>
                 </section>
 
                 <!-- Fetch button -->
@@ -98,7 +91,7 @@
                     <span class="btn-spinner hidden" aria-hidden="true"></span>
                     <span class="btn-text">Search Scenes</span>
                 </button>
-                <p id="fetch-hint" class="fetch-hint">Pick a product and draw an area to begin</p>
+                <p id="fetch-hint" class="fetch-hint">Pick a product and choose an area to begin</p>
 
                 <!-- Loading state -->
                 <div id="status-area" class="status-area hidden" role="status">
@@ -125,9 +118,8 @@
                                autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="district-suggestions">
                         <ul id="district-suggestions" class="district-suggestions hidden" role="listbox"></ul>
                     </div>
-                    <p class="place-or">or draw a rectangle on the map with the
-                        <span class="inline-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(37,99,235,0.15)" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="4 3"/></svg></span>
-                        tool</p>
+                    <p class="place-or">or choose an area</p>
+                    <div id="carbon-area-picker"></div>
 
                     <div id="carbon-place" class="carbon-place hidden"></div>
                 </section>
@@ -136,7 +128,7 @@
                     <span class="btn-spinner hidden" aria-hidden="true"></span>
                     <span class="btn-text">Generate carbon report</span>
                 </button>
-                <p id="carbon-hint" class="fetch-hint">Search a district or draw an area to begin</p>
+                <p id="carbon-hint" class="fetch-hint">Search a district or choose an area to begin</p>
 
                 <div id="carbon-loading" class="status-area hidden" role="status">
                     <div class="skeleton-card tall"></div>
@@ -162,6 +154,11 @@
         <!-- ── Map ─────────────────────────────────────── -->
         <div class="map-wrap">
             <div id="map" class="map"></div>
+
+            <button type="button" id="map-hide" class="map-hide-btn" title="Hide the map">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                <span>Hide map</span>
+            </button>
 
             <!-- Legend / layer card for the raster preview -->
             <div id="map-legend" class="map-legend hidden" aria-live="polite">
@@ -194,6 +191,167 @@
                 <span>Rendering preview…</span>
             </div>
         </div>
+
+        <!-- ── Dashboard (shown in the map's place until an area is chosen) ── -->
+        <section id="dashboard" class="dashboard" aria-label="Overview">
+            <div class="dash-inner">
+                <header class="dash-head">
+                    <h2>Welcome to BluVerify</h2>
+                    <p>Pick a product and dates on the left, then choose an area. The map opens as soon as you draw or enter one.</p>
+                </header>
+
+                <div class="dash-stats" id="dash-stats">
+                    <div class="dash-stat"><span class="dash-stat-label">Past searches</span><span class="dash-stat-value" data-stat="runs">–</span><span class="dash-stat-sub" data-stat="runs-sub">&nbsp;</span></div>
+                    <div class="dash-stat"><span class="dash-stat-label">Areas analysed</span><span class="dash-stat-value" data-stat="areas">–</span><span class="dash-stat-sub" data-stat="areas-sub">&nbsp;</span></div>
+                    <div class="dash-stat"><span class="dash-stat-label">Last search</span><span class="dash-stat-value dash-stat-text" data-stat="last">–</span><span class="dash-stat-sub" data-stat="last-sub">&nbsp;</span></div>
+                    <div class="dash-stat"><span class="dash-stat-label">Data products</span><span class="dash-stat-value" data-stat="products">–</span><span class="dash-stat-sub" data-stat="products-sub">&nbsp;</span></div>
+                </div>
+
+                <div class="dash-tools">
+                    <article class="dash-tool">
+                        <span class="dash-tool-img"><img src="/static/img/screens/app-truecolor.webp" alt="" loading="lazy"></span>
+                        <div class="dash-tool-body">
+                            <span class="dash-tool-label">01 · Satellite scenes</span>
+                            <h3>See every acquisition of your area, and what it measured</h3>
+                            <ul class="dash-ticks">
+                                <li>15 optical, radar, thermal and air-quality products</li>
+                                <li>Plain-language report for every date</li>
+                                <li>Side-by-side, swipe, grid and metadata comparison</li>
+                            </ul>
+                            <button type="button" class="dash-btn" data-dash-mode="scenes">Start a scene search</button>
+                        </div>
+                    </article>
+                    <article class="dash-tool">
+                        <span class="dash-tool-img"><img src="/static/img/screens/app-carbon.webp" alt="" loading="lazy"></span>
+                        <div class="dash-tool-body">
+                            <span class="dash-tool-label">02 · Carbon footprint</span>
+                            <h3>Know what a district emits, and whether the air is changing</h3>
+                            <ul class="dash-ticks">
+                                <li>Yearly CO₂e totals in 10 plain-language sectors</li>
+                                <li>Named facilities: power stations, landfills, airports</li>
+                                <li>Satellite NO₂, CH₄ and CO trends for the same place</li>
+                            </ul>
+                            <button type="button" class="dash-btn" data-dash-mode="carbon">Open carbon footprint</button>
+                        </div>
+                    </article>
+                </div>
+
+                <section class="dash-card">
+                    <div class="dash-card-head">
+                        <h3>Try an example area</h3>
+                        <p>One click sets the area and a suitable product.</p>
+                    </div>
+                    <div class="dash-examples" id="dash-examples"></div>
+                </section>
+
+                <div class="dash-grid">
+                    <section class="dash-card">
+                        <div class="dash-card-head">
+                            <h3>Recent searches</h3>
+                            <button type="button" class="link-btn" id="dash-all-runs">Compare past runs</button>
+                        </div>
+                        <ul class="dash-recent" id="dash-recent"></ul>
+                    </section>
+                    <section class="dash-card">
+                        <div class="dash-card-head">
+                            <h3>What you can measure</h3>
+                            <p>Click a product to select it.</p>
+                        </div>
+                        <div class="dash-products" id="dash-products"></div>
+                    </section>
+                </div>
+
+                <section class="dash-card">
+                    <div class="dash-card-head">
+                        <h3>How it works</h3>
+                        <p>Three steps, straight from the panel on the left.</p>
+                    </div>
+                    <ol class="dash-steps">
+                        <li>
+                            <span class="dash-step-img"><img src="/static/img/screens/step-product.webp" alt="" loading="lazy"></span>
+                            <span class="dash-step-num">1</span>
+                            <strong>Choose a product and dates</strong>
+                            <span>Pick from 15 products, each labelled with what it shows. Presets set common date ranges in one click.</span>
+                        </li>
+                        <li>
+                            <span class="dash-step-img"><img src="/static/img/screens/step-aoi.webp" alt="" loading="lazy"></span>
+                            <span class="dash-step-num">2</span>
+                            <strong>Choose your area</strong>
+                            <span>Draw a rectangle on the map or type its coordinates. The area in km² is filled in for you.</span>
+                        </li>
+                        <li>
+                            <span class="dash-step-img"><img src="/static/img/screens/summary.webp" alt="" loading="lazy"></span>
+                            <span class="dash-step-num">3</span>
+                            <strong>Review, fetch and compare</strong>
+                            <span>Read the scene report, fetch the rasters you need and compare dates. Everything can be downloaded.</span>
+                        </li>
+                    </ol>
+                </section>
+
+                <section class="dash-card">
+                    <div class="dash-card-head">
+                        <h3>Built for your use case</h3>
+                        <p>Click a product to select it.</p>
+                    </div>
+                    <div class="dash-uses">
+                        <article class="dash-use">
+                            <span class="dash-use-icon optical" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22V12M12 12C12 7 8 4 3 4c0 5 4 8 9 8zM12 12c0-4 3-7 8-7 0 4-3 7-8 7z"/></svg></span>
+                            <h4>Agriculture &amp; land</h4>
+                            <p>Track crop vigour and land cover across a season, and flag fields that fall behind.</p>
+                            <span class="dash-chips"><button type="button" class="dash-chip" data-product="2">NDVI</button><button type="button" class="dash-chip" data-product="6">EVI</button><button type="button" class="dash-chip" data-product="1">True Color</button></span>
+                        </article>
+                        <article class="dash-use">
+                            <span class="dash-use-icon radar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></span>
+                            <h4>Urban &amp; infrastructure</h4>
+                            <p>Monitor built-up expansion and site activity between two dates, with dated imagery as a record.</p>
+                            <span class="dash-chips"><button type="button" class="dash-chip" data-product="4">NDBI</button><button type="button" class="dash-chip" data-product="1">True Color</button><button type="button" class="dash-chip" data-product="7">Radar</button></span>
+                        </article>
+                        <article class="dash-use">
+                            <span class="dash-use-icon ocean" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></span>
+                            <h4>Water, flood &amp; drought</h4>
+                            <p>Measure open-water area and wet ground, including under cloud cover using radar.</p>
+                            <span class="dash-chips"><button type="button" class="dash-chip" data-product="3">NDWI</button><button type="button" class="dash-chip" data-product="7">Radar</button><button type="button" class="dash-chip" data-product="9">Thermal</button></span>
+                        </article>
+                        <article class="dash-use">
+                            <span class="dash-use-icon air" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg></span>
+                            <h4>Air quality &amp; ESG screening</h4>
+                            <p>Put a district's emissions, sectors and facilities next to satellite gas trends for the same place.</p>
+                            <span class="dash-chips"><button type="button" class="dash-chip" data-dash-mode="carbon">Carbon footprint</button><button type="button" class="dash-chip" data-product="10">NO₂</button><button type="button" class="dash-chip" data-product="11">CH₄</button></span>
+                        </article>
+                    </div>
+                </section>
+
+                <div class="dash-grid dash-grid-even">
+                    <section class="dash-card">
+                        <div class="dash-card-head">
+                            <h3>What you get from every search</h3>
+                        </div>
+                        <span class="dash-shot"><img src="/static/img/screens/compare-swipe.webp" alt="Swipe comparison between two dates of the same area" loading="lazy"></span>
+                        <ul class="dash-outputs">
+                            <li><span class="dash-out-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></span><span><strong>Scene report CSV</strong>One row per date, with a quality grade and a one-sentence summary.</span></li>
+                            <li><span class="dash-out-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg></span><span><strong>Four compare views</strong>Side-by-side, swipe, grid and a metadata matrix.</span></li>
+                            <li><span class="dash-out-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span><span><strong>GIS-ready GeoTIFF</strong>Coloured like the preview, or raw values for QGIS and ArcGIS.</span></li>
+                            <li><span class="dash-out-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></span><span><strong>Past-run comparison</strong>Merge earlier searches into one timeline.</span></li>
+                        </ul>
+                    </section>
+                    <section class="dash-card">
+                        <div class="dash-card-head">
+                            <h3>About the data</h3>
+                        </div>
+                        <aside class="dash-callout">
+                            <strong>Screening, not certification</strong>
+                            <span>Optical measurements exclude clouds and shadows, and dates with too little visible area are marked rather than guessed. Level labels are indicative guides, not regulatory limits, and emissions figures are estimates for screening.</span>
+                        </aside>
+                        <ul class="dash-sources">
+                            <li><strong>Earth-observation satellites</strong><span>Optical, radar, thermal and atmospheric measurements</span></li>
+                            <li><strong>Climate TRACE</strong><span>Greenhouse-gas emissions by district, sector and facility</span></li>
+                            <li><strong>OpenStreetMap</strong><span>Base map and place names</span></li>
+                        </ul>
+                        <a href="/" class="dash-more">Learn more about BluVerify →</a>
+                    </section>
+                </div>
+            </div>
+        </section>
     </div>
 
     <!-- Toasts -->
@@ -335,5 +493,6 @@
     <!-- App JS -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/carbon.js"></script>
+    <script src="/static/js/dashboard.js"></script>
 </body>
 </html>

@@ -2,7 +2,8 @@
    BluVerify — Carbon footprint mode
 
    Uses app.js globals: map, drawnItems, currentBbox, escapeHtml,
-   scrubSentinel, showToast, bboxAreaKm2, bboxBounds, setButtonLoading.
+   scrubSentinel, showToast, bboxAreaKm2, bboxBounds, setButtonLoading,
+   showMap, mountAreaPicker.
    ================================================================ */
 
 (() => {
@@ -28,6 +29,7 @@ let categoryColors = {};
 
 document.addEventListener("DOMContentLoaded", () => {
     carbonLayer = L.layerGroup();
+    mountAreaPicker(document.getElementById("carbon-area-picker"));
     initModeSwitch();
     initDistrictSearch();
     initMapHooks();
@@ -535,6 +537,7 @@ function wireFacilityList(root, fac) {
 // ── Map layers ───────────────────────────────────────────────────
 
 function drawCarbonLayers(data, fit) {
+    showMap();      // the report has a district and facilities to show
     carbonLayer.clearLayers();
     facilityMarkers = [];
 

@@ -54,6 +54,7 @@ const ICONS = {
 
 document.addEventListener("DOMContentLoaded", () => {
     initMap();
+    renderBbox(null);
     loadProducts();
     initDateDefaults();
     initEventListeners();
@@ -146,20 +147,125 @@ function bboxAreaKm2(bbox) {
     return Math.abs(w * h);
 }
 
+// ── Map visibility ───────────────────────────────────────────────
+// The map starts hidden (#app.map-hidden) and appears once the user
+// chooses an area, or when there is a result to show on it.
+
+function isMapVisible() {
+    return !document.getElementById("app").classList.contains("map-hidden");
+}
+
+function showMap() {
+    if (isMapVisible()) return;
+    document.getElementById("app").classList.remove("map-hidden");
+    // Leaflet measured a zero-size container while hidden; re-measure now
+    // (reading the size forces layout, so callers can fitBounds right after)
+    map.invalidateSize({ animate: false });
+}
+
+function hideMap() {
+    document.getElementById("sidebar").classList.remove("collapsed");
+    document.getElementById("app").classList.add("map-hidden");
+    window.refreshDashboard?.();    // dashboard.js: pick up searches made meanwhile
+}
+
+/** Show the map and start drawing a rectangle straight away. */
+function startDrawArea() {
+    showMap();
+    new L.Draw.Rectangle(map, { shapeOptions: AOI_STYLE }).enable();
+}
+
+/** Use typed coordinates as the AOI, exactly as if the rectangle was drawn. */
+function applyCoordinates(bbox) {
+    showMap();
+    const bounds = bboxBounds(bbox);
+    map.fire(L.Draw.Event.CREATED, { layer: L.rectangle(bounds), layerType: "rectangle" });
+    map.fitBounds(bounds, { padding: [60, 60] });
+}
+
+/** Validate W/S/E/N; returns an error message, or "" if the box is usable. */
+function coordinateError([w, s, e, n]) {
+    if (![w, s, e, n].every(Number.isFinite)) return "Enter all four coordinates as numbers.";
+    if (w < -180 || e > 180) return "Longitudes (west/east) must be between -180 and 180.";
+    if (s < -90 || n > 90) return "Latitudes (south/north) must be between -90 and 90.";
+    if (w >= e) return "West must be smaller than east.";
+    if (s >= n) return "South must be smaller than north.";
+    return "";
+}
+
+const ICON_DRAW = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 3"/></svg>';
+const ICON_COORDS = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+
+/**
+ * Render the "Draw on map / Enter coordinates" picker into `el`. Used by
+ * both the scenes AOI step and the carbon "choose a place" step.
+ */
+function mountAreaPicker(el, { openForm = false, bbox = null } = {}) {
+    const v = i => (bbox ? bbox[i] : "");
+    el.innerHTML = `
+        <div class="area-actions">
+            <button type="button" class="area-btn" data-act="draw">${ICON_DRAW}<span>Draw on map</span></button>
+            <button type="button" class="area-btn" data-act="coords" aria-expanded="${openForm}">${ICON_COORDS}<span>Enter coordinates</span></button>
+        </div>
+        <form class="coord-form${openForm ? "" : " hidden"}" novalidate>
+            <div class="coord-grid">
+                <label><span>West</span><input class="form-input" name="w" type="number" step="any" inputmode="decimal" placeholder="72.80" value="${v(0)}"></label>
+                <label><span>East</span><input class="form-input" name="e" type="number" step="any" inputmode="decimal" placeholder="73.05" value="${v(2)}"></label>
+                <label><span>South</span><input class="form-input" name="s" type="number" step="any" inputmode="decimal" placeholder="22.45" value="${v(1)}"></label>
+                <label><span>North</span><input class="form-input" name="n" type="number" step="any" inputmode="decimal" placeholder="22.65" value="${v(3)}"></label>
+            </div>
+            <p class="field-error hidden" role="alert"></p>
+            <div class="coord-actions">
+                <button type="submit" class="coord-apply">Show on map</button>
+                <button type="button" class="link-btn" data-act="cancel">Cancel</button>
+            </div>
+        </form>`;
+
+    const form = el.querySelector(".coord-form");
+    const toggle = el.querySelector('[data-act="coords"]');
+    const setOpen = open => {
+        form.classList.toggle("hidden", !open);
+        toggle.setAttribute("aria-expanded", open);
+        if (open) form.querySelector("input").focus();
+    };
+
+    el.querySelector('[data-act="draw"]').addEventListener("click", () => {
+        setOpen(false);
+        startDrawArea();
+    });
+    toggle.addEventListener("click", () => setOpen(form.classList.contains("hidden")));
+    el.querySelector('[data-act="cancel"]').addEventListener("click", () => {
+        if (bbox) renderBbox(currentBbox);   // editing an existing area: back to its summary
+        else setOpen(false);
+    });
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const f = form.elements;
+        const box = ["w", "s", "e", "n"].map(k => parseFloat(f[k].value));
+        const err = coordinateError(box);
+        const errEl = form.querySelector(".field-error");
+        errEl.textContent = err;
+        errEl.classList.toggle("hidden", !err);
+        if (err) return;
+        applyCoordinates(box);
+        // The scenes step re-renders itself from the new AOI; the carbon
+        // picker stays in place, so collapse it back to its two buttons.
+        if (el.contains(form)) mountAreaPicker(el);
+    });
+}
+
 // ── Bbox display ─────────────────────────────────────────────────
 
 function renderBbox(bbox) {
     const el = document.getElementById("bbox-display");
     if (!bbox) {
         el.classList.remove("active");
-        el.innerHTML = `
-            <p class="bbox-hint">
-                Use the
-                <span class="inline-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(37,99,235,0.15)" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="4 3"/></svg></span>
-                rectangle tool on the map to draw your area
-            </p>`;
+        el.classList.add("picker");
+        mountAreaPicker(el);
         return;
     }
+    el.classList.remove("picker");
 
     const area = bboxAreaKm2(bbox);
     const areaStr = area >= 1000
@@ -176,11 +282,20 @@ function renderBbox(bbox) {
         </div>
         <div class="bbox-meta">
             <span>≈ ${areaStr}</span>
-            <button type="button" class="link-btn" id="bbox-zoom">Zoom to area</button>
+            <span class="bbox-links">
+                <button type="button" class="link-btn" id="bbox-edit">Edit coordinates</button>
+                <button type="button" class="link-btn" id="bbox-zoom">Show on map</button>
+            </span>
         </div>`;
 
     document.getElementById("bbox-zoom").addEventListener("click", () => {
+        showMap();
         map.fitBounds(bboxBounds(bbox), { padding: [60, 60] });
+    });
+    document.getElementById("bbox-edit").addEventListener("click", () => {
+        el.classList.remove("active");
+        el.classList.add("picker");
+        mountAreaPicker(el, { openForm: true, bbox });
     });
 }
 
@@ -277,6 +392,7 @@ function initEventListeners() {
     document.getElementById("product-select").addEventListener("change", refreshFetchBtn);
     document.getElementById("fetch-btn").addEventListener("click", fetchData);
     document.getElementById("sidebar-toggle").addEventListener("click", toggleSidebar);
+    document.getElementById("map-hide").addEventListener("click", hideMap);
 
     ["date-from", "date-to"].forEach(id => {
         document.getElementById(id).addEventListener("change", () => {
@@ -362,7 +478,7 @@ function refreshFetchBtn() {
 
     const missing = [];
     if (!productId)   missing.push("pick a product");
-    if (!currentBbox) missing.push("draw an area on the map");
+    if (!currentBbox) missing.push("choose an area");
 
     if (btn.classList.contains("loading")) return;
     btn.disabled = missing.length > 0 || !!dateErr;
@@ -646,6 +762,7 @@ async function showPreview(rasterPath, bbox, productId, meta = {}) {
     const url     = `/api/preview/${encodeURI(rasterPath)}?product_id=${productId}`;
 
     loading.classList.remove("hidden");
+    showMap();
     map.fitBounds(bounds, { padding: [60, 60] });
 
     try {
